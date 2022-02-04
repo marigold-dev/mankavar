@@ -1,0 +1,1 @@
+module My_int_container = [%abstract ("ints" : int list)]

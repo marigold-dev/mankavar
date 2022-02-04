@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@opam/alcotest": "1.5.0",
+    "@opam/dune": "*",
+    "@opam/ppxlib": "0.23.0",
+    "@opam/ptime": "0.8.6",
+    "ocaml": "4.13.x"
+  },
+  "devDependencies": { "@opam/ocaml-lsp-server": "1.9.1" }
+}

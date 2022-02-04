@@ -1,0 +1,8 @@
+(test
+ (name das_test)
+ (libraries
+  das
+
+  alcotest
+ )
+)

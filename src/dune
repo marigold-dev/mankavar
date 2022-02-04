@@ -1,0 +1,16 @@
+(library
+ (name das)
+ (libraries
+ 
+  ; ocaml
+  unix
+  ; global
+  ptime
+ )
+ (preprocess
+  (pps
+   ppx_woo
+   ppx_abstract
+  )
+ )
+)
