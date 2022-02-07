@@ -24,7 +24,11 @@ module RawSignature = struct
       (RawAddress.public_key @@ signer x) 
 
   type 'a signed = 'a t
-  let pp_signed = pp
+  let pp_signed f : _ -> 'a signed -> unit = fun ppf x ->
+    Format.fprintf ppf "<%a> from %a"
+      f (x|>content)
+      RawAddress.pp_public_key
+      (RawAddress.public_key @@ signer x) 
   let get x = x
   let check : RawAddress.public_key -> 'a t -> bool = fun k t ->
     t
@@ -43,6 +47,7 @@ module rec Address : sig
   type public_key
   val public_key : t -> public_key
   val public_key_equal : public_key -> public_key -> bool
+  val pp_public_key : Format.formatter -> public_key -> unit
 
   val generate : unit -> t
 end = RawAddress
@@ -50,7 +55,7 @@ and Signature : sig
   type 'a t
   val pp : Format.formatter -> 'a t -> unit
   type 'a signed
-  val pp_signed : Format.formatter -> 'a signed -> unit
+  val pp_signed : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a signed -> unit
   val get : 'a signed -> 'a t
   val content : 'a signed -> 'a
   val check : Address.public_key -> 'a t -> bool

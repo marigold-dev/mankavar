@@ -63,6 +63,45 @@ module XMap = struct
   end
 end
 
+module Hash = struct
+  type t = Bytes.t
+  let compare : t -> t -> int = Bytes.compare
+end
+
+module Index = struct
+  module Raw = struct
+    type t =
+    | Height of int
+    [@@deriving ez]
+
+    let of_int = height
+    let to_int = get_height_exn
+    let compare : t -> t -> int = compare
+    let equal a b = compare a b = 0
+    let zero = height 0
+    let increment t =
+      t
+      |> map_height (fun i -> i + 1)
+
+    module Map = XMap.Make(struct type nonrec t = t let compare = compare end)
+    let pp ppf x = Format.fprintf ppf "%d" (x |> get_height_exn)
+  end
+
+  module Make() : sig
+    type t
+    val of_int : int -> t
+    val to_int : t -> int
+    val compare : t -> t -> int
+    val equal : t -> t -> bool
+    val zero : t
+    val increment : t -> t
+    val pp : Format.formatter -> t -> unit
+    module Map : module type of XMap.Make(struct type nonrec t = t let compare = compare end)
+  end = struct include Raw end
+end
+
+module Height = Index.Make()
+
 module TaskClockedQueue = struct
 
   module Raw = struct

@@ -9,8 +9,11 @@
  )
  (preprocess
   (pps
+   ; vendors
    ppx_woo
    ppx_abstract
+   ; global
+   ppx_deriving.show
   )
  )
 )
