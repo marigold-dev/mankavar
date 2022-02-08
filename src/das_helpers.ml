@@ -1,3 +1,129 @@
+let tuple2 x y = (x , y)
+let tuple3 x y z = (x , y, z)
+
+module PseudoEffect = struct
+
+  type 'a return = {
+    return : 'b . 'a -> 'b ;
+  }
+
+  let returner (type r) f =
+    let exception Return of r in
+    let p = {
+      return = fun x -> raise (Return x) ;
+    } in
+    try f p
+    with Return r -> r
+
+  type 'a fail = {
+    fail : 'b . 'a -> 'b ;
+  }
+
+  let fail_opt f =
+    returner @@ fun { return } ->
+    let fail () = return None in
+    Option.some @@ f { fail }
+
+end
+
+module Encoding = struct
+  (* Not serialiable!! *)
+  type 'a t =
+  | Unit : unit t
+  | Int32 : int32 t
+  | Int64 : int64 t
+  | String : string t
+  | Bytes : bytes t
+  | Union : 'a case list -> 'a t
+  | List : 'a t -> 'a list t
+  | Tuple_2 : 'a t * 'b t -> ('a * 'b) t
+  | Tuple_3 : 'a t * 'b t * 'c t -> ('a * 'b * 'c) t
+  | Tuple_4 : 'a t * 'b t * 'c t * 'd t -> ('a * 'b * 'c * 'd) t
+  | Tuple_5 : 'a t * 'b t * 'c t * 'd t * 'e t -> ('a * 'b * 'c * 'd * 'e) t
+  | Conv : ('a -> 'b) * ('b -> 'a) * 'a t -> 'b t
+  and 'a case = Case : ('a -> 'b option) * ('b -> 'a) * 'b t -> 'a case
+
+  let case forth back x = Case (forth , back , x)
+  let union lst = Union lst
+  let unit = Unit
+  let int32 = Int32
+  let int64 = Int64
+  let string = String
+  let bytes = Bytes
+  let tuple_2 a b = Tuple_2 (a , b)
+  let tuple_3 a b c = Tuple_3 (a , b , c)
+  let tuple_4 a b c d = Tuple_4 (a , b , c , d)
+  let tuple_5 a b c d e = Tuple_5 (a , b , c , d , e)
+  let pair = tuple_2
+  let conv forth back x = Conv (forth , back , x)
+  let int = conv Int64.to_int Int64.of_int int64
+  let list x = List x
+
+  module To_bytes = struct
+    (* 
+      TODO:
+      - Add size prefix for unbounded constructors (string, bytes, list)
+      - Add tag for unions
+    *)
+    (*
+      TODO:
+      - Precompute expected size of buffer
+      - Use buffer
+    *)
+    let prefix x = Bytes.cat (Bytes.of_string x)
+    let of_int32 i =
+      let b = Bytes.make 4 '0' in
+      Bytes.set_int32_be b 0 i ;
+      b
+    let of_int64 i =
+      let b = Bytes.make 8 '0' in
+      Bytes.set_int64_be b 0 i ;
+      b
+    let rec main : type a . a t -> a -> bytes = fun e ->
+      let self = main in
+      match e with
+      | Unit -> fun () -> prefix "u" Bytes.empty
+      | Int32 -> fun i -> (
+        prefix "i" @@ of_int32 i
+      )
+      | Int64 -> fun i -> (
+        prefix "I" @@ of_int64 i
+      )
+      | String -> fun s -> (
+        prefix "s" @@ Bytes.of_string s
+      )
+      | Bytes -> fun b -> prefix "b" b
+      | Union lst -> fun x -> (
+        PseudoEffect.returner @@ fun { return } ->
+        List.iter (fun (Case (forth , _back , a)) ->
+          match forth x with
+          | Some x' -> return @@ self a x'
+          | None -> ()
+        ) lst ;
+        failwith "no matching case in variant"
+      )
+      | Tuple_2 (a , b) -> fun (x , y) -> (
+        prefix "2" @@ Bytes.cat (self a x) (self b y)
+      )
+      | Tuple_3 (a , b , c) -> fun (x , y , z) -> (
+        prefix "3" @@ Bytes.cat (self a x) @@ Bytes.cat (self b y) (self c z)
+      )
+      | Tuple_4 (a , b , c , d) -> fun (x , y , z , w) -> (
+        prefix "4" @@ Bytes.cat (self a x) @@ Bytes.cat (self b y)
+          @@ Bytes.cat (self c z) (self d w)
+      )
+      | Tuple_5 (a , b , c , d , e) -> fun (x1 , x2 , x3 , x4 , x5) -> (
+        prefix "5" @@ Bytes.cat (self a x1) @@ Bytes.cat (self b x2)
+          @@ Bytes.cat (self c x3) @@ Bytes.cat (self d x4) (self e x5)
+      )
+      | List a -> fun lst -> (
+        prefix "l" @@ Bytes.concat Bytes.empty @@ List.map (self a) lst
+      )
+      | Conv (_forth , back , a) -> fun x -> self a @@ back x
+  end
+  let to_bytes = To_bytes.main
+end
+
 module XPtime = struct
   open Ptime
 
@@ -41,6 +167,13 @@ module XPtime = struct
   let now : unit -> Ptime.t = fun () ->
     Unix.gettimeofday () |> of_float_s |> Option.get
 
+  let span_encoding : span Encoding.t = Encoding.(
+    conv (fun x -> Span.of_d_ps x |> Option.get) (Span.to_d_ps) @@
+    tuple_2 int int64
+  )
+  let encoding : t Encoding.t = Encoding.(
+    conv (fun x -> Ptime.of_span x |> Option.get) (Ptime.to_span) span_encoding
+  )
 end
 
 module XMap = struct
@@ -63,39 +196,59 @@ module XMap = struct
   end
 end
 
+module XOption = struct
+  let value' : (unit -> 'a) -> 'a option -> 'a = fun f opt ->
+    match opt with
+    | None -> f ()
+    | Some x -> x
+end
+
+module XBytes = struct
+  let pp_char ppf c = Format.fprintf ppf "%x" @@ Char.code c
+  let pp ppf b =
+    Bytes.iter (pp_char ppf) b
+end
+
 module Hash = struct
   type t = Bytes.t
   let compare : t -> t -> int = Bytes.compare
+  let pp = XBytes.pp
+  let encoding : t Encoding.t = Encoding.bytes
 end
 
 module Index = struct
   module Raw = struct
     type t =
-    | Height of int
+    | Height of int32
     [@@deriving ez]
 
-    let of_int = height
-    let to_int = get_height_exn
-    let compare : t -> t -> int = compare
+    let of_int32 = height
+    let to_int32 = get_height_exn
+    let map_int32 f x = of_int32 @@ f @@ to_int32 x
+    let compare : t -> t -> int = fun x y ->
+      Int32.compare (to_int32 x) (to_int32 y)
     let equal a b = compare a b = 0
-    let zero = height 0
+    let zero = height Int32.zero
     let increment t =
       t
-      |> map_height (fun i -> i + 1)
+      |> map_height Int32.succ
 
     module Map = XMap.Make(struct type nonrec t = t let compare = compare end)
-    let pp ppf x = Format.fprintf ppf "%d" (x |> get_height_exn)
+    let pp ppf x = Format.fprintf ppf "%ld" (x |> get_height_exn)
+    let encoding = Encoding.(conv of_int32 to_int32 int32)
   end
 
   module Make() : sig
     type t
-    val of_int : int -> t
-    val to_int : t -> int
+    val of_int32 : int32 -> t
+    val to_int32 : t -> int32
+    val map_int32 : (int32 -> int32) -> t -> t
     val compare : t -> t -> int
     val equal : t -> t -> bool
     val zero : t
     val increment : t -> t
     val pp : Format.formatter -> t -> unit
+    val encoding : t Encoding.t
     module Map : module type of XMap.Make(struct type nonrec t = t let compare = compare end)
   end = struct include Raw end
 end
@@ -163,18 +316,3 @@ module TaskClockedQueue = struct
   include (Raw : TYPE)
 end
 
-module PseudoEffect = struct
-
-  type 'a return = {
-    return : 'b . 'a -> 'b ;
-  }
-
-  let returner (type r) f =
-    let exception Return of r in
-    let p = {
-      return = fun x -> raise (Return x) ;
-    } in
-    try f p
-    with Return r -> r
-
-end

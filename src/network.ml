@@ -51,14 +51,14 @@ let run_for : Ptime.span -> t -> t = fun d t ->
     let todos = ref [] in
     (* First, synchronize. Then, process messages.*)
     (* 1. Synchronize *)
-    let ns' = List.map (Node.Packed.map ({ mapper = fun (type a) ((module Node) : (message , a) Node.Packed.node) node ->
-      let (todos' , node') = Node.synchronize !cl node in
-      List.iter (fun todo -> 
+    let ns' = List.map (Node.Packed.map ({ mapper = fun (type a) ((module Node') : (message , a) Node.Packed.node) node ->
+      let (sents , node') = Node'.synchronize !cl node in
+      List.iter (fun broadcast -> 
         let ping = Ping.eval ping in
         Format.printf "Ping: %a@;%!" Ptime.Span.pp ping ;
         Format.printf "Inc: %a@;%!" Ptime.Span.pp inc ;
-        msgs := TCQ.add_task (Ptime.add_span !cl ping |> Option.get) todo !msgs ;
-      ) todos' ;
+        msgs := TCQ.add_task (Ptime.add_span !cl ping |> Option.get) broadcast !msgs ;
+      ) @@ List.filter_map Node.Send.get_broadcast_opt sents ;
       node'
     })) !ns in
     ns := ns' ;

@@ -1,8 +1,19 @@
+module Send = struct
+  (*
+    - A broadcast is a message that is originated
+    - A gossip is a message that is forwarded
+  *)
+  type 'a t =
+  | Broadcast of 'a
+  | Gossip of 'a
+  [@@deriving ez]
+end
+
 module type TYPE = sig
   type t
   type message
-  val synchronize : Ptime.t -> t -> (message list * t)
-  val process_message : message -> t -> (message list * t)
+  val synchronize : Ptime.t -> t -> (message Send.t list * t)
+  val process_message : message -> t -> (message Send.t list * t)
 end
 
 module Packed = struct

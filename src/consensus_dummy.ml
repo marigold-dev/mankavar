@@ -2,6 +2,7 @@
 
 open Das_helpers
 
+module Send = Node.Send
 module TCQ = TaskClockedQueue
 module Addr = Account.Address
 module Sig = Account.Signature
@@ -21,6 +22,10 @@ module Block = struct
       height : Height.t ;
     }
     [@@deriving ez]
+    let encoding = Encoding.(
+      conv (make_tpl []) height Height.encoding
+    )
+    let to_bytes = Encoding.to_bytes encoding
   end
   type t = {
     content : Candidate.t ;
@@ -81,7 +86,8 @@ module RawBlockProducerNode = struct
   
   let dummy_block_candidate_signed t =
     let bc = dummy_block_candidate (height t) in
-    Sig.sign (t |> account |> Addr.private_key) bc
+    let secret_key = t |> account |> Addr.secret_key in
+    Sig.sign ~secret_key ~content:bc ~to_bytes:Block.Candidate.to_bytes
 
   let noop (t : t) _ = [] , t
 
@@ -107,11 +113,11 @@ module RawBlockProducerNode = struct
     |> state
     |> LocalState.destruct
     ~will_propose_next_level:(
-      [Message.block_proposal @@ dummy_block_candidate_signed t] ,
+      [Send.broadcast @@ Message.block_proposal @@ dummy_block_candidate_signed t] ,
       set_state LocalState.waiting_for_endorsements t
     )
     ~waiting_for_endorsements:(
-      [Message.block_proposal @@ dummy_block_candidate_signed t] ,
+      [Send.broadcast @@ Message.block_proposal @@ dummy_block_candidate_signed t] ,
       set_state LocalState.waiting_for_endorsements t
     )          
 
@@ -125,10 +131,11 @@ module RawBlockProducerNode = struct
     ~waiting_for_endorsements:(lazy ())
     |> Lazy.force |> fun () ->
     let signature = Sig.get bc_signed in
-    let pub = Sig.signer signature in
-    if not @@ List.exists (Addr.public_key_equal pub) @@ endorsers t
+    let public_key = Sig.signer signature in
+    let content = Sig.content bc_signed in
+    if not @@ List.exists (Addr.public_key_equal public_key) @@ endorsers t
       then return ([] , t) ;
-    if not @@ Sig.check pub signature
+    if not @@ Sig.check ~public_key ~signature ~content ~to_bytes:Block.Candidate.to_bytes
       then return ([] , t) ;
     let bc = Sig.content bc_signed in
     if not @@ Height.equal (Block.Candidate.height bc) (height t)
@@ -139,7 +146,7 @@ module RawBlockProducerNode = struct
       | Some x -> x
     in
     if List.exists
-      (fun x -> Addr.public_key_equal pub (Sig.signer x)) block_endorsements
+      (fun x -> Addr.public_key_equal public_key (Sig.signer x)) block_endorsements
       then return ([] , t) ; 
     let block_endorsements = signature :: block_endorsements in
     let t =
@@ -192,12 +199,17 @@ module RawEndorserNode = struct
     ~block_proposal:(fun bc_signed ->
       let signature = Account.Signature.get bc_signed in
       let bc = Account.Signature.content bc_signed in
-      if not @@ Account.Signature.check (producer t) signature
+      if not @@ Account.Signature.check
+        ~public_key:(producer t) ~signature ~content:bc
+        ~to_bytes:Block.Candidate.to_bytes
         then [] , t
       else (
-        let pk = t |> account |> Account.Address.private_key in
-        let signed = Account.Signature.sign pk bc in
-        [Message.endorsement signed] , t
+        let sk = t |> account |> Account.Address.secret_key in
+        let signed =
+          Account.Signature.sign
+            ~secret_key:sk ~content:bc ~to_bytes:Block.Candidate.to_bytes
+        in
+        [Send.broadcast @@ Message.endorsement signed] , t
       )
     )
 end
