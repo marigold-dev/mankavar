@@ -72,7 +72,7 @@ let type_declaration ?non_recursive : P.type_declaration -> W.type_declaration =
   let body =
     match td.ptype_kind with
     | P.Ptype_variant cds ->  (
-        let aux : P.constructor_declaration -> W.constructor_declaration = fun cd ->
+        let aux i : P.constructor_declaration -> W.constructor_declaration = fun cd ->
           let constructor = cd.pcd_name.txt in
           let (params , args) =
             match cd.pcd_args with
@@ -91,10 +91,10 @@ let type_declaration ?non_recursive : P.type_declaration -> W.type_declaration =
             )
             | P.Pcstr_record _lds -> failwith "ppx woo doesn't support inline records" (* [ record lds ] *)
           in
-          (constructor , (params , args))
+          (constructor , (i , params , args))
         in
         let polymorphic = false in
-        let constructor_declarations = W.c_decls @@ List.map aux cds in
+        let constructor_declarations = W.c_decls @@ List.mapi aux cds in
         W.T_variant { polymorphic ; constructor_declarations }
       )
     | P.Ptype_record lds -> record lds

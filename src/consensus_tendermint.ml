@@ -2,9 +2,14 @@
 
 (* TODO:
   - Only sign hashes
+  - Add previous blocks commitments
+  - Block validation
+  - Pipeline Block balidation
 *)
 
-let hash : bytes -> bytes = fun _ -> assert false
+let hash : bytes -> bytes = fun b -> Digestif.BLAKE2B.(
+  b |> digest_bytes |> to_raw_string |> Bytes.of_string
+)
 
 open Das_helpers
 
@@ -14,15 +19,25 @@ module Sig = Account.Signature
 module Send = Node.Send
 
 let nb_endorsers = 10
-
-let step_time_ms = 1_000
-let commitment_time_ms = 1_000
-let block_time_ms = step_time_ms * 3 + commitment_time_ms
+(* let nb_endorsers = 4 *)
+let step_time_ms = 600 (* Duration of regular steps *)
+let commitment_time_ms = 600
+let postcommitment_time_ms = 600
+let block_time_ms = step_time_ms * 3 + commitment_time_ms + postcommitment_time_ms
+let max_byzantine = nb_endorsers / 3
+let prevote_threshold = nb_endorsers - max_byzantine
+let precommitment_threshold = nb_endorsers - max_byzantine
+let commitment_threshold = nb_endorsers - max_byzantine
 
 module Operation = struct
   type t = unit
   let encoding : t Encoding.t = Encoding.unit
 end
+
+let signature_prepend sign lst =
+  if List.exists (Sig.equal sign) lst
+  then lst
+  else sign :: lst
 
 module Round = struct
   module Index = Index.Make()
@@ -53,12 +68,16 @@ module Block = struct
       height : Height.t ;
       time : Ptime.t ;
       previous_hash : Hash.t ;
-      state_hash : Hash.t ;
+      (* state_hash : Hash.t ; *)
     }
     [@@deriving ez]
-    let encoding = Encoding.(
+    (* let encoding = Encoding.(
       conv (fun (x1, x2, x3, x4, x5) -> make_tpl x1 x2 x3 x4 x5) destruct @@
       tuple_5 string Height.encoding XPtime.encoding Hash.encoding Hash.encoding
+    ) *)
+    let encoding = Encoding.(
+      conv (fun (x1, x2, x3, x4) -> make_tpl x1 x2 x3 x4) destruct @@
+      tuple_4 string Height.encoding XPtime.encoding Hash.encoding
     )
   end
   module Operations = struct
@@ -74,7 +93,7 @@ module Block = struct
   module Previous_validation = struct
     (*
       The paper refers to "previous validations". But never explained anywhere.
-      Only congruent meaning is "commitments".
+      Only congruent meaning is "commitments" from the previous block.
     *)
     type t = {
       signatures : unit ; (* TODO: what is signed here? *)
@@ -99,6 +118,7 @@ module Block = struct
   )
   let to_bytes = Encoding.to_bytes encoding
   let hash : t -> bytes = fun t -> Encoding.to_bytes encoding t |> hash
+  let height : t -> Height.t = fun x -> x |> header |> Header.height
 end
 
 module BlockProposal = struct
@@ -167,7 +187,6 @@ module Blocks = struct
     )
 end
 
-
 module Prevote = struct
   type content =
   | Nil of unit
@@ -192,6 +211,7 @@ module Prevote = struct
     tuple_3 content_encoding Height.encoding Round.Index.encoding
   )
   let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
+  let unsigned_pp = pp_unsigned
 
   type t = {
     unsigned : unsigned ;
@@ -201,11 +221,16 @@ module Prevote = struct
 end
 
 module Precommitment = struct
-  (* Those are supposed to be Block Hashes, obtained from blocks *)
-  type unsigned = Hash.t
-  let unsigned_encoding : unsigned Encoding.t = Hash.encoding
+  type unsigned = {
+    block_hash : Hash.t ;
+    height : Height.t ;
+  }
+  [@@deriving ez , show { with_path = false } , ord]
+  let unsigned_encoding : unsigned Encoding.t = Encoding.(
+    conv (fun (x,y) -> unsigned_make_tpl x y) unsigned_destruct @@
+    tuple_2 Hash.encoding Height.encoding
+  )
   let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
-  let unsigned_compare = Hash.compare
   type t = {
     unsigned : unsigned ;
     precommitter_signature : unsigned Sig.t ; [@printer Sig.pp]
@@ -221,13 +246,13 @@ module Commitment = struct
     block_hash : Hash.t ;
     height : Height.t ;
   }
-  [@@deriving ez]
+  [@@deriving ez , ord, show { with_path = false }]
   let unsigned_encoding : unsigned Encoding.t = Encoding.(
     conv (fun (x,y) -> unsigned_make_tpl x y) unsigned_destruct @@
     tuple_2 Hash.encoding Height.encoding
   )
   let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
-
+  let unsigned_pp = pp_unsigned
   type t = {
     unsigned : unsigned ;
     committer_signature : unsigned Sig.t ;
@@ -260,21 +285,22 @@ module Message = struct
   [@@deriving ez]
 
   let prefix str f ppf x =
-    Format.fprintf ppf "%s%a" str f x
+    Format.fprintf ppf "@[%s%a@]" str f x
 
   let pp : _ -> t -> unit = fun ppf ->
     destruct
     ~block_proposal:(prefix "Block_proposal: " (BlockProposal.pp) ppf)
-    ~prevote:(prefix "Vote: " (Prevote.pp) ppf)
+    ~prevote:(prefix "Prevote: " (Prevote.pp) ppf)
     ~precommitment:(prefix "Precommitment: " (Precommitment.pp) ppf)
     ~commitment:(prefix "Commitment: " (Commitment.pp) ppf)
     ~block:(prefix "Block: " (BlockInfo.pp) ppf)
 end
 
-
 module RawTendermintNode = struct
   (*
     Tendermint Node
+    To check manually:
+    - All gossiped messages must have been signed by an endorser
   *)
 
   module Lock = struct
@@ -285,6 +311,12 @@ module RawTendermintNode = struct
       prevote_signatures : Prevote.prevoter_signature list ;
     }
     [@@deriving ez]
+
+    let pp ppf x =
+      let (c , sigs) = destruct x in
+      Format.fprintf ppf "(%d sigs)%a"
+        (List.length sigs)
+        Prevote.unsigned_pp c
 
     let height t = t |> content |> Prevote.height
   end
@@ -312,9 +344,10 @@ module RawTendermintNode = struct
 
     let empty threshold = make ~prevotes:CMap.empty ~threshold
 
-    let add ~threshold_limit : Prevote.t -> t -> t = fun pv t ->
+    let add ~threshold : Prevote.t -> t -> t = fun pv t ->
       let sign = pv |> Prevote.prevoter_signature in
       let key = pv |> Prevote.unsigned |> Prevote.content in
+      (* Format.printf "add prevote@;%!" ; *)
       t
       |> map_prevotes (CMap.update key (fun lst_opt ->
         let lst = Option.value lst_opt ~default:[] in
@@ -325,7 +358,8 @@ module RawTendermintNode = struct
       ))
       |> fun t ->
       let signs = CMap.find key (t |> prevotes) in
-      if List.length signs > threshold_limit
+      (* Format.printf "Prevote Signatures (%d) vs Threshold (%d)@;%!" (List.length signs) threshold ; *)
+      if List.length signs >= threshold
       then t |> set_threshold (
         signs
         |> Lock.make_tpl (pv |> Prevote.unsigned)
@@ -337,7 +371,7 @@ module RawTendermintNode = struct
   module PrecommitmentState = struct
     module CMap = XMap.Make(struct
       type t = Precommitment.unsigned
-      let compare = Precommitment.unsigned_compare
+      let compare = Precommitment.compare_unsigned
     end)
 
     type t = {
@@ -348,7 +382,7 @@ module RawTendermintNode = struct
 
     let empty = make_tpl CMap.empty Option.none
 
-    let add ~threshold_limit : Precommitment.t -> t -> t = fun pv t ->
+    let add ~threshold : Precommitment.t -> t -> t = fun pv t ->
       let sign = pv |> Precommitment.precommitter_signature in
       let key = pv |> Precommitment.unsigned in
       t
@@ -361,12 +395,67 @@ module RawTendermintNode = struct
       ))
       |> fun t ->
       let signs = CMap.find key (t |> precommits) in
-      if List.length signs > threshold_limit
+      if List.length signs >= threshold
       then t |> set_precommitted_block (
         pv |> Precommitment.unsigned
         |> Option.some
       ) else t
 
+  end
+
+  module CommitmentState = struct
+
+    module Commitments = struct
+      (* Map per commitment *)
+      module CMap = XMap.Make(struct
+        type t = Commitment.unsigned
+        let compare = Commitment.compare_unsigned
+      end)
+      type t = Commitment.unsigned Sig.t list CMap.t
+
+      (* Keep commitments no longer than this duration *)
+      let keep_height = 10l
+
+      let empty : t = CMap.empty
+
+      let add : Commitment.t -> t -> t = fun c t ->
+        (* Format.printf "Add commitment:%a@;%!" Commitment.unsigned_pp (c |> Commitment.unsigned) ; *)
+        (* Format.printf "Number of commitments:%d@;%!" @@ CMap.cardinal t ; *)
+        let unsigned = c |> Commitment.unsigned in
+        let sigs =
+          t |> CMap.find_opt unsigned
+          |> Option.value ~default:[]
+        in
+        let sig_ = c |> Commitment.committer_signature in
+        let sigs' = signature_prepend sig_ sigs in
+        (* Format.printf "%d vs %d@;%!" (List.length sigs) (List.length sigs') ; *)
+        t |> CMap.add unsigned sigs'
+    end
+
+    (* The committed block is always at the current height *)
+    type t = {
+      commits : Commitments.t ;
+      committed_block : Hash.t option ;
+    }
+    [@@deriving ez]
+    let empty = make_tpl Commitments.empty Option.none
+    let all_commitments_nb t = Commitments.CMap.cardinal (t |> commits)
+    let add ~threshold : Commitment.t -> t -> t = fun c t ->
+      t
+      |> map_commits (Commitments.add c)
+      |> fun t ->
+      let sigs = t |> commits |> Commitments.CMap.find (c |> Commitment.unsigned) in
+      let bh = c |> Commitment.unsigned |> Commitment.block_hash in
+      (* Format.printf "Commitment Signatures (%d) vs Threshold (%d)@;%!" (List.length sigs) threshold ; *)
+      (* Format.printf "Number of commitments:%d@;%!" @@ all_commitments_nb t ; *)
+      if List.length sigs >= threshold
+      then t |> set_committed_block @@ Option.some bh
+      else t
+
+  end
+
+  module PostcommitmentState = struct
+    type t = Hash.t
   end
 
   module StepState = struct
@@ -375,27 +464,36 @@ module RawTendermintNode = struct
     | Prevote of PrevoteState.t
     | Precommitment of PrecommitmentState.t
     | Commitment of unit
+    | Postcommitment of PostcommitmentState.t
     [@@deriving ez]
+
+    let pp ppf = destruct_tpl
+      (fun _ -> Format.fprintf ppf "proposal")
+      (fun _ -> Format.fprintf ppf "prevote")
+      (fun _ -> Format.fprintf ppf "precommitment")
+      (fun _ -> Format.fprintf ppf "commitment")
+      (fun _ -> Format.fprintf ppf "postcommitment")
 
     let prevote_empty = prevote @@ PrevoteState.empty Option.none
   end
 
   type t = {
+    network : string ;
     account : Addr.t ;
     clock : Ptime.t ;
     endorsers : Account.Address.public_key list ;
     height : Height.t ;
     round : Round.Index.t ;
     lock : Lock.t option ;
-    commitments : Commitment.t list ;
+    commitments : CommitmentState.t ;
     blocks : Blocks.t ;
     step_start_time : Ptime.t ;
     state : StepState.t ;
   }
   [@@deriving ez]
 
-  let prevote_threshold = (nb_endorsers * 2 / 3 + 1)
-  let precommit_threshold = (nb_endorsers * 2 / 3 + 1)
+  let pp_id : _ -> t -> unit = fun ppf t ->
+    t |> account |> Addr.public_key |> Addr.pp_public_key ppf
 
   let set_state s t =
     t |> set_step_start_time (t |> clock) |> set_state s
@@ -434,8 +532,17 @@ module RawTendermintNode = struct
     of given height and round
   *)
   let get_proposer : endorsers -> height -> Round.Index.t -> t -> Account.Address.public_key
-  = fun _ _ _ ->
-    assert false
+  = fun lst h r _ ->
+    let l = List.length lst in
+    let h' =
+      h
+      |> Height.to_int32
+      |> fun h -> Int32.(rem h @@ of_int l)
+      |> Int32.to_int
+    in
+    let r' = r |> Round.Index.to_int32 |> Int32.to_int in
+    let i = (h' + r') mod l in
+    List.nth lst i
 
   let get_current_proposer : t -> Account.Address.public_key = fun t ->
     get_proposer (t|>endorsers) (t|>height) (t|>round) t
@@ -447,7 +554,8 @@ module RawTendermintNode = struct
     unsigned |> sign ~to_bytes:Prevote.unsigned_to_bytes t
     |> Sig.get |> Prevote.make_tpl unsigned |> Message.prevote
   
-  let do_precommit : t -> Precommitment.unsigned -> Message.t = fun t unsigned ->
+  let do_precommit : t -> Precommitment.block_hash -> Message.t = fun t bh ->
+    let unsigned = Precommitment.unsigned_make ~block_hash:bh ~height:(t |> height) in
     unsigned |> sign ~to_bytes:Precommitment.unsigned_to_bytes t
     |> Sig.get |> Precommitment.make_tpl unsigned |> Message.precommitment
 
@@ -455,14 +563,20 @@ module RawTendermintNode = struct
     unsigned |> sign ~to_bytes:Commitment.unsigned_to_bytes t
     |> Sig.get |> Commitment.make_tpl unsigned |> Message.commitment
 
-
   type message = Message.t
 
-  let empty clock endorsers account =
+  let empty ~network clock endorsers account : t =
     let height = Height.zero in
     let state = StepState.proposal @@ ProposalState.no_proposal in
-    let commitments = [] in
-    make ~account ~clock ~endorsers ~height ~state ~commitments
+    let commitments = CommitmentState.empty in
+    let step_start_time = clock in
+    let lock = Option.none in
+    let round = Round.Index.zero in
+    let blocks = Blocks.empty in
+    make
+      ~account ~clock ~endorsers ~height ~state
+      ~commitments ~blocks ~lock ~round ~step_start_time
+      ~network
 
   (*
     This should increase as round increases to allow for bad networks. Adaptative.
@@ -473,8 +587,29 @@ module RawTendermintNode = struct
 
   let noop (t : t) _ = [] , t
 
-  let dummy_block_proposal : t -> BlockProposal.t = fun _ ->
-    assert false
+  let dummy_state_hash = Hash.dummy
+
+  let dummy_block_proposal : t -> BlockProposal.t = fun t ->
+    let height = t |> height in
+    let block =
+      let header =
+        (* let state_hash = dummy_state_hash in *)
+        let previous_hash = Hash.dummy in
+        let time = t |> clock in
+        let network_name = t |> network in
+        Block.Header.make ~height ~time ~previous_hash ~network_name
+      in
+      let operations = Block.Operations.make_tpl [] in
+      let previous_validation = Block.Previous_validation.make_tpl () in
+      Block.make ~header ~operations ~previous_validation
+    in
+    let unsigned =
+      let round = t |> round in
+      BlockProposal.unsigned_make ~height ~round ~block
+    in
+    let signed = sign ~to_bytes:BlockProposal.unsigned_to_bytes t unsigned in
+    let proposer_signature = signed |> Sig.get in
+    BlockProposal.make ~unsigned ~proposer_signature
 
   let propose_start t =
     if Addr.public_key_equal
@@ -502,6 +637,7 @@ module RawTendermintNode = struct
     )
 
   let propose_timeout t s =
+    (* Format.printf "Propose timeout@;%!" ; *)
     t |> lock |> Option.fold
     ~some:(fun l ->
       [Lock.content l |> Prevote.content |> do_prevote_current t |> Send.broadcast] ,
@@ -521,20 +657,25 @@ module RawTendermintNode = struct
     )
 
   let prevote_timeout t s =
-    s |> PrevoteState.threshold |> Option.fold
-    ~none:(
+    (* Format.printf "Prevote timeout@;%!" ; *)
+    s |> PrevoteState.threshold |> XOption.fold'
+    ~none:(fun () ->
+      (* Format.printf "No threshold@;%!" ; *)
       [] ,
       t |> set_state @@ StepState.precommitment PrecommitmentState.empty
     )
     ~some:(fun lproof ->
+      (* Format.printf "Lock:%a@;%!" Lock.pp lproof ; *)
       lproof |> Lock.content |> Prevote.content |> Prevote.content_destruct
       ~nil:(fun () ->
+        (* Format.printf "nil lock@;%!" ; *)
         [] ,
         t
         |> set_state @@ StepState.precommitment PrecommitmentState.empty
         |> set_lock Option.none
       )
       ~block:(fun bp ->
+        (* Format.printf "block lock@;%!" ; *)
         [bp |> do_precommit t |> Send.broadcast] ,
         t
         |> set_state @@ StepState.precommitment PrecommitmentState.empty
@@ -542,23 +683,34 @@ module RawTendermintNode = struct
       )
     )
 
-  let precommit_timeout t s =
+  let precommitment_timeout t s =
+    (* Format.printf "Precommitment timeout@;%!" ; *)
     s |> PrecommitmentState.precommitted_block |> Option.fold
     ~none:(
       t
       |> map_round Round.Index.increment
       |> propose_start
     )
-    ~some:(fun h -> (
+    ~some:(fun pc -> (
+      let h = Precommitment.block_hash pc in
       [Commitment.unsigned_make_tpl h (t |> height) |> do_commit t |> Send.broadcast] ,
       t
       |> set_state @@ StepState.commitment ()
     ))
 
   let commit_timeout t () =
+    (* Format.printf "Commitment timeout@;%!" ; *)
     t
     |> map_round Round.Index.increment
     |> propose_start
+
+  let postcommitment_timeout t _pc =
+  t
+  |> map_height Height.increment
+  |> fun t ->
+  [] , t
+
+
 
   (* TODO: Add round drift for bad network *)
   let step_timeout t =
@@ -567,103 +719,227 @@ module RawTendermintNode = struct
     ~prevote:(fun _ -> step_time_ms)
     ~precommitment:(fun _ -> step_time_ms)
     ~commitment:(fun _ -> commitment_time_ms)
+    ~postcommitment:(fun _ -> postcommitment_time_ms)
     |> XPtime.ms_int
 
   let synchronize new_clock t =
     PseudoEffect.returner @@ fun { return } ->
     let t = set_clock new_clock t in
     let time_since_step = Ptime.diff new_clock (t |> step_start_time) in
-    if Ptime.Span.(compare time_since_step (t|>step_timeout) >= 0) then
+    (* Format.printf "New clock: %a@;%!" XPtime.pp_ms new_clock ;
+    Format.printf "Step Start Time: %a@;%!" XPtime.pp_ms (t |> step_start_time) ;
+    Format.printf "Time since step: %a@;%!" Ptime.Span.pp time_since_step ;
+    Format.printf "Timeout: %a@;%!" Ptime.Span.pp (t |> step_timeout) ; *)
+    (* let print_lock s t =
+      Format.printf "%s Lock? %b@;%!" s (
+        t |> state
+        |> StepState.get_prevote_opt |> Option.fold ~none:false ~some:(fun x -> x
+          |> PrevoteState.threshold |> Option.is_some
+        )
+      )
+    in *)
+    if Ptime.Span.(compare time_since_step (t|>step_timeout) <= 0) then
       return ([] , t) ;
     t
+    |> set_step_start_time new_clock
+    |> fun t -> t
     |> state
     |> StepState.destruct
     ~proposal:(propose_timeout t)
     ~prevote:(prevote_timeout t)
-    ~precommitment:(precommit_timeout t)
+    ~precommitment:(precommitment_timeout t)
     ~commitment:(commit_timeout t)
+    ~postcommitment:(postcommitment_timeout t)
+    (* |> fun x -> print_lock "post" (snd x) ; x *)
 
   let process_block_proposal t bp =
     PseudoEffect.returner @@ fun { return } ->
     let noop x = return @@ noop t x in
-    t |> state
+    (* Format.printf "Receiving block proposal@;%!" ; *)
+
+    t
+    |> state
     |> StepState.get_proposal_opt |> XOption.value' noop
     |> ProposalState.destruct
     ~no_proposal:(ProposalState.proposed bp)
     ~proposed:(ProposalState.proposed)
     |> fun ps ->
       [Send.gossip @@ Message.block_proposal bp] ,
-      t |> set_state @@ StepState.proposal ps
+      t
+      |> map_blocks (Blocks.add (bp |> BlockProposal.unsigned |> BlockProposal.block))
+      |> set_state @@ StepState.proposal ps
 
   let process_prevote t pv =
     PseudoEffect.returner @@ fun { return } ->
     let noop x = return @@ noop t x in
-    let threshold_limit = prevote_threshold in
-    (* Check sig is correct *)
-    let () =
-      let public_key = Sig.signer (pv |> Prevote.prevoter_signature) in
-      let content = pv |> Prevote.unsigned in
-      let signature = pv |> Prevote.prevoter_signature in
-      let to_bytes = Prevote.unsigned_to_bytes in
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
-      then noop ()
-    in
+    (* Format.printf "Receiving prevote in state %a@;%!" StepState.pp (t |> state) ; *)
+
+    let threshold = prevote_threshold in
     t |> state
     |> StepState.get_prevote_opt |> XOption.value' noop
-    |> PrevoteState.add ~threshold_limit pv
+    (* |> fun x -> Format.printf "adding prevote@;%!" ; x *)
+    |> PrevoteState.add ~threshold pv
     |> StepState.prevote |> fun x -> set_state x t
-    |> fun t -> [Send.gossip @@ Message.prevote pv] , t
-
+    |> fun t ->
+    (* Format.printf "Lock? %b@;%!" (
+      t |> state
+      |> StepState.get_prevote_opt |> XOption.value' noop
+      |> PrevoteState.threshold |> Option.is_some
+    ); *)
+    [Send.gossip @@ Message.prevote pv] , t
+ 
   let process_precommitment t pc =
     PseudoEffect.returner @@ fun { return } ->
     let noop x = return @@ noop t x in
-    let threshold_limit = precommit_threshold in
-    (* Check sig is correct *)
-    let () =
-      let public_key = Sig.signer (pc |> Precommitment.precommitter_signature) in
-      let content = pc |> Precommitment.unsigned in
-      let signature = pc |> Precommitment.precommitter_signature in
-      let to_bytes = Precommitment.unsigned_to_bytes in
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
-      then noop ()
-    in
+
+    (* Format.printf "Processing precommitment@;%!" ; *)
+    let threshold = precommitment_threshold in
     t |> state
     |> StepState.get_precommitment_opt |> XOption.value' noop
-    |> PrecommitmentState.add ~threshold_limit pc
+    |> PrecommitmentState.add ~threshold pc
     |> StepState.precommitment |> fun x -> set_state x t
     |> fun t -> [Send.gossip @@ Message.precommitment pc] , t
 
-
   let process_block t bi =
-    PseudoEffect.returner @@ fun { return } ->
-    let noop x = return @@ noop t x in
-    let public_key = Sig.signer (bi |> BlockInfo.endorser_signature) in
-    (* Check block comes from endorser *)
-    let () =
-      if not @@ List.exists (Addr.public_key_equal public_key) (t |> endorsers)
-      then noop ()      
-    in
-    (* Check sig is correct *)
-    let () =
-      let content = bi |> BlockInfo.block in
-      let signature = bi |> BlockInfo.endorser_signature in
-      let to_bytes = BlockInfo.block_to_bytes in
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
-      then noop ()
-    in
     [Send.gossip @@ Message.block bi] ,
     t |> map_blocks (Blocks.add (bi |> BlockInfo.block))
 
   let process_commitment t c =
-    assert false
+    let threshold = commitment_threshold in
+    PseudoEffect.returner @@ fun { return } ->
+    let default t _ = return ([Send.gossip @@ Message.commitment c] , t) in
+
+    (* Format.printf "Processing commitment@;%!" ; *)
+
+    let get_committed_block_hash t =
+      t |> commitments |> CommitmentState.committed_block |> XOption.fold'' (default t) Fun.id
+    in
+    let get_block t bh =
+      let default x =
+        (* Format.printf "Missing committed block@;%!" ; *)
+        default t x
+      in
+      t |> blocks |> Blocks.find_opt (t |> height) bh |> XOption.fold'' default Fun.id
+    in
+    t
+    |> map_commitments (CommitmentState.add ~threshold c)
+    |> fun t ->
+    let commitment () =
+      (* Format.printf "Processing commitment in state@;%!" ; *)
+      (* Format.printf "Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
+      t
+      |> get_committed_block_hash
+      |> fun bh ->
+      (* Format.printf "Got committed block@;%!" ; *)
+      bh
+      |> get_block t
+      |> fun _ ->
+      (* Format.printf "last Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
+      [ Send.gossip @@ Message.commitment c ] ,
+      t |> set_state @@ StepState.postcommitment bh
+    in
+    let default x = default t x in
+    t |> state |> StepState.destruct
+    ~proposal:default ~prevote:default ~precommitment:default
+    ~commitment ~postcommitment:default
+
+  let get_height : message -> t -> Height.t = fun m _ ->
+    m |> Message.destruct 
+    ~block_proposal:BlockProposal.(fun x -> x |> unsigned |> height)
+    ~prevote:Prevote.(fun x -> x |> unsigned |> height)
+    ~precommitment:Precommitment.(fun x -> x |> unsigned |> height)
+    ~commitment:Commitment.(fun x -> x |> unsigned |> height)
+    ~block:BlockInfo.(fun x -> x |> block |> Block.height)
+
+  (* Checks the signature from a message, and that it comes from an endorser *)
+  let has_signature_from_endorser : message -> t -> bool = fun m t ->
+    PseudoEffect.returner @@ fun { return } ->
+    let nope () = return false in
+
+    let is_endorser public_key =
+      if not @@ List.exists (Addr.public_key_equal public_key) (t |> endorsers)
+      then nope ()
+    in
+
+    m |> Message.destruct 
+    ~block_proposal:BlockProposal.(fun x ->
+      let signature = x |> proposer_signature in
+      let content = x |> unsigned in
+      let public_key = signature |> Sig.signer in
+      let to_bytes = unsigned_to_bytes in
+
+      is_endorser public_key ;
+      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      then nope () ;
+      true
+    )
+    ~prevote:Prevote.(fun x ->
+      let signature = x |> prevoter_signature in
+      let content = x |> unsigned in
+      let public_key = signature |> Sig.signer in
+      let to_bytes = unsigned_to_bytes in
+
+      is_endorser public_key ;
+      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      then nope () ;
+      true
+    )
+    ~precommitment:Precommitment.(fun x ->
+      let signature = x |> precommitter_signature in
+      let content = x |> unsigned in
+      let public_key = signature |> Sig.signer in
+      let to_bytes = unsigned_to_bytes in
+
+      is_endorser public_key ;
+      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      then nope () ;
+      true
+    )
+    ~commitment:Commitment.(fun x ->
+      let signature = x |> committer_signature in
+      let content = x |> unsigned in
+      let public_key = signature |> Sig.signer in
+      let to_bytes = unsigned_to_bytes in
+
+      is_endorser public_key ;
+      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      then nope () ;
+      true
+    )
+    ~block:BlockInfo.(fun x ->
+      let signature = x |> endorser_signature in
+      let content = x |> block in
+      let public_key = signature |> Sig.signer in
+      let to_bytes = block_to_bytes in
+
+      is_endorser public_key ;
+      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      then nope () ;
+      true
+    )
+
 
   let process_message m t =
+    PseudoEffect.returner @@ fun { return } ->
+    let noop x = return @@ noop t x in
+
+    (* Discard messages from different height *)
+    (
+      let h = get_height m t in
+      if not @@ Height.equal h (t |> height)
+      then noop () ;
+    ) ;
+    (* Discard messages not coming from endorsers or with incorrect signatures *)
+    (
+      if not @@ has_signature_from_endorser m t
+      then noop () ;
+    ) ;
     m |> Message.destruct
     ~block_proposal:(process_block_proposal t)
     ~prevote:(process_prevote t)
     ~precommitment:(process_precommitment t)
-    ~block:(process_block t)
     ~commitment:(process_commitment t)
+    ~block:(process_block t)
 end
 
 module TendermintNodeWitness : Node.TYPE = RawTendermintNode

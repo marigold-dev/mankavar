@@ -6,6 +6,7 @@
   unix
   ; global
   ptime
+  digestif
  )
  (preprocess
   (pps

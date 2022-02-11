@@ -4,7 +4,8 @@ module TCQ = TaskClockedQueue
 (*
   Bad simulated network implementation.
   - Messages take at least `increment` time to be propagated to nodes.
-  - All messages are propagated to all nodes
+  - All broadcasts are propagated to all nodes without hops
+  - Gossips are ignored
 *)
 
 module Ping = struct
@@ -26,7 +27,6 @@ module type PARAMETER = sig
 end
 
 module Make(P : PARAMETER) = struct
-
 
 open P
 type message = Message.t
@@ -51,35 +51,41 @@ let run_for : Ptime.span -> t -> t = fun d t ->
     let todos = ref [] in
     (* First, synchronize. Then, process messages.*)
     (* 1. Synchronize *)
+    Format.printf "Synchronize at current Clock: %a@;%!" XPtime.pp_ms !cl ;
     let ns' = List.map (Node.Packed.map ({ mapper = fun (type a) ((module Node') : (message , a) Node.Packed.node) node ->
       let (sents , node') = Node'.synchronize !cl node in
-      List.iter (fun broadcast -> 
+      sents 
+      |> List.filter_map Node.Send.get_broadcast_opt
+      |> List.iter (fun broadcast -> 
         let ping = Ping.eval ping in
-        Format.printf "Ping: %a@;%!" Ptime.Span.pp ping ;
-        Format.printf "Inc: %a@;%!" Ptime.Span.pp inc ;
-        msgs := TCQ.add_task (Ptime.add_span !cl ping |> Option.get) broadcast !msgs ;
-      ) @@ List.filter_map Node.Send.get_broadcast_opt sents ;
+        msgs := TCQ.add_task
+          (Ptime.add_span !cl ping |> Option.get) broadcast !msgs ;
+      ) ;
       node'
     })) !ns in
     ns := ns' ;
-    Format.printf "Tasks after sync: %d (%d)@;%!"
+    (* Format.printf "Tasks after sync: %d (%d)@;%!"
       (List.length !todos)
-      (TCQ.size !msgs) ;
-    List.iter (Format.printf "Will deal with: %a@;" P.Message.pp) !todos ;
+      (TCQ.size !msgs) ; *)
+    List.iter (Format.printf "Will deal with: %a@;%!" P.Message.pp) !todos ;
+    (* Format.printf "Process Messages@;%!" ; *)
     (* 2. Process messages *)
     let (todos' , msgs') = TCQ.flush_until !cl !msgs in
     todos := (todos' |> List.map snd) @ !todos ;
     msgs := msgs' ;
     while !todos <> [] do
       let (next , todos') = List.(hd !todos , tl !todos) in
-      Format.printf "Dealing with: %a@;" P.Message.pp next ;
+      Format.printf "Dealing with: %a@;%!" P.Message.pp next ;
       todos := todos' ;
       let ns' = List.map (Node.Packed.map ({ mapper = fun (type a) (m_node : (message , a) Node.Packed.node) node ->
-        let module Node = (val m_node) in
-        let (todos' , node') = Node.process_message next node in
+        let module Node' = (val m_node) in
+        let (sents , node') = Node'.process_message next node in
         let ping = Ping.eval ping in        
-        todos' |> List.iter (fun todo ->
-          msgs := TCQ.add_task (Ptime.add_span !cl ping |> Option.get) todo !msgs ;
+        sents
+        |> List.filter_map Node.Send.get_broadcast_opt
+        |> List.iter (fun broadcast ->
+          msgs := TCQ.add_task
+            (Ptime.add_span !cl ping |> Option.get) broadcast !msgs ;
         ) ;
         node'
       })) !ns in

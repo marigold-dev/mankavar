@@ -8,7 +8,7 @@ open Helpers
 
 let constructor_type polymorphic : W.constructor_declaration -> P.structure_item list = fun lts ->
   ignore polymorphic ;
-  let (label , (parameters , tys)) = lts in
+  let (label , (_ , parameters , tys)) = lts in
   let body =
     match tys with
     | [] -> t_unit
@@ -26,7 +26,7 @@ let constructor_types : W.variant -> P.structure_item list = fun v ->
   items
 
 let constructor ?wrap_constructor polymorphic : W.constructor_declaration -> P.structure_item list = fun lts ->
-  let (label , (_params , tys)) = lts in
+  let (label , (_index , _params , tys)) = lts in
   let l = List.length tys in
   let wrap body =
     match wrap_constructor with

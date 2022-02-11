@@ -8,7 +8,7 @@ open Helpers
 
 let mappers ?wrap_map:_ : W.variant -> P.structure_item list = fun variant ->
   let W.{ polymorphic ; _ } = variant in
-  let case (label_main , _) (label , (_params , tes)) =
+  let case (label_main , _) (label , (_index , _params , tes)) =
     let names = var_names "_p" @@ List.length tes in
     let vars = List.map e_var names in
     let (lhs , body) =
@@ -27,7 +27,7 @@ let mappers ?wrap_map:_ : W.variant -> P.structure_item list = fun variant ->
     (label , names , lhs , body)
   in
   let lst = SMap.to_kv_list variant.constructor_declarations in
-  let single : W.constructor_declaration -> _ = fun ((label , (_params , tes)) as main) ->
+  let single : W.constructor_declaration -> _ = fun ((label , (_index , _params , tes)) as main) ->
     let names = var_names "f" @@ List.length tes in
     d_value ("map_" ^ label) @@
     e_funs names @@ e_fun "x" @@ e_match_pattern ~polymorphic (e_var "x") @@
@@ -39,7 +39,7 @@ let mappers ?wrap_map:_ : W.variant -> P.structure_item list = fun variant ->
 let setters ?wrap_map:_ : W.variant -> P.structure_item list = fun variant ->
   let lst = SMap.to_kv_list variant.constructor_declarations in
   let W.{ polymorphic ; _ } = variant in
-  let case (label_main , _) (label , (_params , tes)) =
+  let case (label_main , _) (label , (_index , _params , tes)) =
     let names = var_names "_" @@ List.length tes in
     let (lhs , body) =
       if label <> label_main then (
@@ -51,7 +51,7 @@ let setters ?wrap_map:_ : W.variant -> P.structure_item list = fun variant ->
     in
     (label , names , lhs , body)
   in
-  let single : W.constructor_declaration -> _ = fun ((label , (_params , tes)) as main) ->
+  let single : W.constructor_declaration -> _ = fun ((label , (_index , _params , tes)) as main) ->
     let names = var_names "s" @@ List.length tes in     
     d_value ("set_" ^ label) @@
     e_fun "x" @@ e_funs names @@ e_match_pattern ~polymorphic (e_var "x") @@

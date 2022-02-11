@@ -8,13 +8,18 @@ open Helpers
 
 let destruct prefix : W.variant -> P.structure_item list = fun variant ->
   let W.{ polymorphic ; constructor_declarations } = variant in
-  let lts = SMap.to_kv_list constructor_declarations in
+  let lts =
+    constructor_declarations
+    |> SMap.to_kv_list
+    |> List.sort (fun (_ , (i , _ , _)) (_ , (i' , _ , _)) -> Int.compare i i')
+  in
   let vars =
     lts
     |> List.map (fun (l , _tes) -> l)
     |> List.map String.lowercase_ascii
   in
-  let single_case : W.constructor_declaration -> (string * string list * P.expression) = fun (lbl , (_params , tes)) ->
+  let single_case : W.constructor_declaration -> (string * string list * P.expression)
+  = fun (lbl , (_index , _params , tes)) ->
     let l = List.length tes in
     let body = e_applies_curry (e_var @@ String.lowercase_ascii lbl) @@ e_vars "x" l in
     (lbl , var_names "x" l , body)
@@ -31,13 +36,19 @@ let destruct prefix : W.variant -> P.structure_item list = fun variant ->
 
 let destruct_tpl prefix : W.variant -> P.structure_item list = fun variant ->
   let W.{ polymorphic ; constructor_declarations } = variant in
-  let lts = SMap.to_kv_list constructor_declarations in
+  let lts =
+    constructor_declarations
+    |> SMap.to_kv_list
+    |> List.sort (fun (_ , (i , _ , _)) (_ , (i' , _ , _)) -> Int.compare i i')
+  in
   let vars =
     lts
     |> List.map (fun (l , _tes) -> l)
     |> List.map String.lowercase_ascii
   in
-  let single_case : W.constructor_declaration -> (string * string list * P.expression) = fun (lbl , (_params , tes)) ->
+  (* List.iter (fun v -> Format.printf "Var : %s\n%!" v) vars ;  *)
+  let single_case : W.constructor_declaration -> (string * string list * P.expression)
+  = fun (lbl , (_index , _params , tes)) ->
     let l = List.length tes in
     let body = e_applies_curry (e_var @@ String.lowercase_ascii lbl) @@ e_vars "x" l in
     (lbl , var_names "x" l , body)

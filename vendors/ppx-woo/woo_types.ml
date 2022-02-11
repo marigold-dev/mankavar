@@ -15,7 +15,7 @@ type variant = {
   polymorphic : bool ;
 }
 
-and constructor_declaration_content = (type_parameters * type_expression list)
+and constructor_declaration_content = (int * type_parameters * type_expression list)
 and constructor_declaration = string * constructor_declaration_content
 
 and record_field = {

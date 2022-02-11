@@ -174,6 +174,8 @@ module XPtime = struct
   let encoding : t Encoding.t = Encoding.(
     conv (fun x -> Ptime.of_span x |> Option.get) (Ptime.to_span) span_encoding
   )
+
+  let pp_ms = pp_human ~frac_s:3 ()
 end
 
 module XMap = struct
@@ -201,6 +203,14 @@ module XOption = struct
     match opt with
     | None -> f ()
     | Some x -> x
+  
+  let fold' ~none ~some = function
+  | None -> none ()
+  | Some x -> some x
+
+  let fold'' none some = function
+  | None -> none ()
+  | Some x -> some x
 end
 
 module XBytes = struct
@@ -214,6 +224,7 @@ module Hash = struct
   let compare : t -> t -> int = Bytes.compare
   let pp = XBytes.pp
   let encoding : t Encoding.t = Encoding.bytes
+  let dummy = Bytes.empty
 end
 
 module Index = struct

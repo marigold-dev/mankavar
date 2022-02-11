@@ -27,7 +27,8 @@ let matching ?wrap_get ~namer case : W.variant -> W.constructor_declaration -> P
   let declarations = A.pstr_value Nonrecursive [ declaration ] in
   declarations
 
-let generic_case ~polymorphic ~base_label rhs : W.constructor_declaration -> P.case = fun (current_label , (_params , tys)) ->
+let generic_case ~polymorphic ~base_label rhs : W.constructor_declaration -> P.case
+= fun (current_label , (_index , _params , tys)) ->
   let variable_name = "_ppx_match_variable" in
   let e_variable = e_var variable_name in
   let p_variable = p_var variable_name in

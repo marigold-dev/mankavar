@@ -14,7 +14,7 @@ let dummy_accounts = List.init 100 (fun _ -> Das.Account.Address.generate ())
 
 let nth_account i = List.nth dummy_accounts i
 
-let honest = test_quick "Progress when all nodes honest" @@ fun () ->
+let honest = test_quick "Live when nodes honest" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let bp = nth_account 0
@@ -37,12 +37,12 @@ let honest = test_quick "Progress when all nodes honest" @@ fun () ->
   let network' = Network.run_for duration Start.network in
   let module Bp = (val network' |> Network.nodes |> List.hd) in
   let bp_node = (Obj.magic Bp.x : CD.RawBlockProducerNode.t) in
-  Format.printf "Height : %d\n" @@ Height.to_int @@ CD.RawBlockProducerNode.height bp_node ;
-  assert (CD.RawBlockProducerNode.height bp_node >= Height.of_int 10) ;
+  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ CD.RawBlockProducerNode.height bp_node ;
+  assert (CD.RawBlockProducerNode.height bp_node >= Height.of_int32 10l) ;
   ignore @@ network' ;
   ()
 
-let third_dead = test_quick "Progress when 1/3 endorsers dead" @@ fun () ->
+let third_dead = test_quick "Live when 1/3 endorsers dead" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let bp = nth_account 0
@@ -78,12 +78,12 @@ let third_dead = test_quick "Progress when 1/3 endorsers dead" @@ fun () ->
   let network' = Network.run_for duration Start.network in
   let module Bp = (val network' |> Network.nodes |> List.hd) in
   let bp_node = (Obj.magic Bp.x : CD.RawBlockProducerNode.t) in
-  Format.printf "Height : %d\n" @@ Height.to_int @@ CD.RawBlockProducerNode.height bp_node ;
-  assert (CD.RawBlockProducerNode.height bp_node >= Height.of_int 10) ;
+  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ CD.RawBlockProducerNode.height bp_node ;
+  assert (CD.RawBlockProducerNode.height bp_node >= Height.of_int32 10l) ;
   ignore @@ network' ;
   ()
 
-let third_plus_dead = test_quick "Dead when 1+1/3 endorsers dead" @@ fun () ->
+let third_plus_dead = test_quick "Dead when 1+1/3 nodes dead" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let bp = nth_account 0
@@ -119,8 +119,8 @@ let third_plus_dead = test_quick "Dead when 1+1/3 endorsers dead" @@ fun () ->
   let network' = Network.run_for duration Start.network in
   let module Bp = (val network' |> Network.nodes |> List.hd) in
   let bp_node = (Obj.magic Bp.x : CD.RawBlockProducerNode.t) in
-  Format.printf "Height : %d\n" @@ Height.to_int @@ CD.RawBlockProducerNode.height bp_node ;
-  assert (CD.RawBlockProducerNode.height bp_node = Height.of_int 0) ;
+  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ CD.RawBlockProducerNode.height bp_node ;
+  assert (CD.RawBlockProducerNode.height bp_node = Height.of_int32 0l) ;
   ignore @@ network' ;
   ()
 
