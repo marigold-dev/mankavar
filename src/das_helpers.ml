@@ -58,6 +58,7 @@ module Encoding = struct
   let conv forth back x = Conv (forth , back , x)
   let int = conv Int64.to_int Int64.of_int int64
   let list x = List x
+  let dummy default = conv (fun () -> default) (fun _ -> ()) unit
 
   module To_bytes = struct
     (* 

@@ -1,7 +1,9 @@
 [@@@warning "-23-34"]
 
 (* TODO:
-  - Add previous blocks commitments
+  - Encoding for signatures
+  - Add signature with pk, signature with hash, signature with content
+  - Check previous block commitments
   - Block validation
   - Pipeline Block balidation
 *)
@@ -60,6 +62,29 @@ module State = struct
   end
 end
 
+module Commitment = struct
+  type unsigned = {
+    block_hash : Hash.t ;
+    height : Height.t ;
+  }
+  [@@deriving ez , ord, show { with_path = false }]
+  let unsigned_encoding : unsigned Encoding.t = Encoding.(
+    conv (fun (x,y) -> unsigned_make_tpl x y) unsigned_destruct @@
+    tuple_2 Hash.encoding Height.encoding
+  )
+  let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
+  let unsigned_to_hash x = x |> unsigned_to_bytes |> do_hash
+  let unsigned_pp = pp_unsigned
+  type t = {
+    unsigned : unsigned ;
+    committer_signature : unsigned Sig.t ;
+  }
+  [@@deriving ez]
+  (* TODO *)
+  let pp ppf _ = Format.fprintf ppf "commit"
+end
+
+
 module Block = struct
   module Header = struct
     type t = {
@@ -89,23 +114,22 @@ module Block = struct
       conv make_tpl destruct @@ list Operation.encoding
     )
   end
-  module Previous_validation = struct
+  module Previous_commitments = struct
     (*
-      The paper refers to "previous validations". But never explained anywhere.
-      Only congruent meaning is "commitments" from the previous block.
+      Commitment from previous blocks
     *)
     type t = {
-      signatures : unit ; (* TODO: what is signed here? *)
+      signatures : Commitment.unsigned Sig.t list ;
     }
     [@@deriving ez]
     let encoding : t Encoding.t = Encoding.(
-      conv make_tpl destruct unit
+      conv make_tpl destruct @@ dummy []
     )
   end
   type t = {
     header : Header.t ;
     operations : Operations.t ;
-    previous_validation : Previous_validation.t ;
+    previous_commitments : Previous_commitments.t ;
   }
   [@@deriving ez]
   let pp : _ -> t -> unit = fun ppf t ->
@@ -113,7 +137,7 @@ module Block = struct
       Height.pp (t |> header |> Header.height)
   let encoding = Encoding.(
     conv (fun (x,y,z) -> make_tpl x y z) destruct @@
-    tuple_3 Header.encoding Operations.encoding Previous_validation.encoding
+    tuple_3 Header.encoding Operations.encoding Previous_commitments.encoding
   )
   let to_bytes = Encoding.to_bytes encoding
   let hash : t -> bytes = fun t -> Encoding.to_bytes encoding t |> do_hash
@@ -261,28 +285,6 @@ module Precommitment = struct
   let pp ppf _ = Format.fprintf ppf "precommit"
 end
 
-module Commitment = struct
-  type unsigned = {
-    block_hash : Hash.t ;
-    height : Height.t ;
-  }
-  [@@deriving ez , ord, show { with_path = false }]
-  let unsigned_encoding : unsigned Encoding.t = Encoding.(
-    conv (fun (x,y) -> unsigned_make_tpl x y) unsigned_destruct @@
-    tuple_2 Hash.encoding Height.encoding
-  )
-  let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
-  let unsigned_to_hash x = x |> unsigned_to_bytes |> do_hash
-  let unsigned_pp = pp_unsigned
-  type t = {
-    unsigned : unsigned ;
-    committer_signature : unsigned Sig.t ;
-  }
-  [@@deriving ez]
-  (* TODO *)
-  let pp ppf _ = Format.fprintf ppf "commit"
-end
-
 module BlockInfo = struct
   type t = {
     block : Block.t ;
@@ -425,34 +427,35 @@ module RawTendermintNode = struct
 
   end
 
+  module Commitments = struct
+    (* Map per commitment *)
+    module CMap = XMap.Make(struct
+      type t = Commitment.unsigned
+      let compare = Commitment.compare_unsigned
+    end)
+    type t = Commitment.unsigned Sig.t list CMap.t
+    (* Keep commitments no longer than this duration *)
+    let keep_height = 10l
+    let empty : t = CMap.empty
+    let add : Commitment.t -> t -> t = fun c t ->
+      (* Format.printf "Add commitment:%a@;%!" Commitment.unsigned_pp (c |> Commitment.unsigned) ; *)
+      (* Format.printf "Number of commitments:%d@;%!" @@ CMap.cardinal t ; *)
+      let unsigned = c |> Commitment.unsigned in
+      let sigs =
+        t |> CMap.find_opt unsigned
+        |> Option.value ~default:[]
+      in
+      let sig_ = c |> Commitment.committer_signature in
+      let sigs' = signature_prepend sig_ sigs in
+      (* Format.printf "%d vs %d@;%!" (List.length sigs) (List.length sigs') ; *)
+      t |> CMap.add unsigned sigs'
+    let find_opt : Commitment.unsigned -> t -> Commitment.unsigned Sig.t list option = fun h t ->
+
+      CMap.find_opt h t
+  end
+
   module CommitmentState = struct
 
-    module Commitments = struct
-      (* Map per commitment *)
-      module CMap = XMap.Make(struct
-        type t = Commitment.unsigned
-        let compare = Commitment.compare_unsigned
-      end)
-      type t = Commitment.unsigned Sig.t list CMap.t
-
-      (* Keep commitments no longer than this duration *)
-      let keep_height = 10l
-
-      let empty : t = CMap.empty
-
-      let add : Commitment.t -> t -> t = fun c t ->
-        (* Format.printf "Add commitment:%a@;%!" Commitment.unsigned_pp (c |> Commitment.unsigned) ; *)
-        (* Format.printf "Number of commitments:%d@;%!" @@ CMap.cardinal t ; *)
-        let unsigned = c |> Commitment.unsigned in
-        let sigs =
-          t |> CMap.find_opt unsigned
-          |> Option.value ~default:[]
-        in
-        let sig_ = c |> Commitment.committer_signature in
-        let sigs' = signature_prepend sig_ sigs in
-        (* Format.printf "%d vs %d@;%!" (List.length sigs) (List.length sigs') ; *)
-        t |> CMap.add unsigned sigs'
-    end
 
     (* The committed block is always at the current height *)
     type t = {
@@ -617,21 +620,32 @@ module RawTendermintNode = struct
   let dummy_block_proposal : t -> BlockProposal.t = fun t ->
     let height = t |> height in
     let block =
+      let prev_height = Height.predecessor height in
+      let prev_hash =
+        if Height.(equal height zero) then
+          Hash.dummy
+        else
+          t |> blocks |> Blocks.find_final prev_height |> Option.get
+      in
       let header =
         (* let state_hash = dummy_state_hash in *)
-        let previous_hash =
-          if Height.(equal height zero) then
-            Hash.dummy
-          else
-            t |> blocks |> Blocks.find_final (Height.predecessor height) |> Option.get
-        in
         let time = t |> clock in
         let network_name = t |> network in
-        Block.Header.make ~height ~time ~previous_hash ~network_name
+        Block.Header.make ~height ~time ~previous_hash:prev_hash ~network_name
       in
       let operations = Block.Operations.make_tpl [] in
-      let previous_validation = Block.Previous_validation.make_tpl () in
-      Block.make ~header ~operations ~previous_validation
+      let previous_commitments =
+        let prevs =
+          if Height.(equal height zero) then
+            []
+          else (
+            let c = Commitment.unsigned_make ~block_hash:prev_hash ~height:prev_height in
+            t |> commitments |> CommitmentState.commits |> Commitments.find_opt c |> Option.get
+          )
+        in
+        Block.Previous_commitments.make_tpl prevs
+      in
+      Block.make ~header ~operations ~previous_commitments
     in
     let unsigned =
       let round = t |> round in
