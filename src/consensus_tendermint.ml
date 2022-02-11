@@ -152,11 +152,25 @@ module Blocks = struct
   module HMap = Height.Map
   (* Map per block hash *)
   module BMap = XMap.Make(Hash)
+
+  module Height_content = struct
+    type t = {
+      all : Block.t BMap.t ;
+      finalized_hash : Hash.t option ;
+    }
+    [@@deriving ez]
+
+    let find_opt k t = t |> all |> BMap.find_opt k
+    let empty = make_tpl BMap.empty Option.none
+    let add k v t = t |> map_all (BMap.add k v)
+  end
+  type height_content = Height_content.t
+
   (*
     Double indexed map.
-    At least one block should be added per height (else, memory leaks!)
+    - At least one block should be added per height (else, memory leaks!)
   *)
-  type t = Block.t BMap.t HMap.t
+  type t = height_content HMap.t
 
   (* Keep blocks no longer than this duration *)
   let keep_height = 10l
@@ -166,8 +180,12 @@ module Blocks = struct
   let find_opt : Height.t -> Hash.t -> t -> Block.t option = fun h bh t ->
     t
     |> HMap.find_opt h
-    |> fun x -> Option.bind x (BMap.find_opt bh)
-
+    |> XOption.bind' (Height_content.find_opt bh)
+  let find_final : Height.t -> t -> Hash.t option = fun h t ->
+    t
+    |> HMap.find_opt h
+    |> XOption.bind' Height_content.finalized_hash
+    
   let mem h bh t = Option.is_some @@ find_opt h bh t
 
   (* The block must always exist (for instance, a locked block) *)
@@ -180,9 +198,9 @@ module Blocks = struct
     t
     |> HMap.remove (Height.map_int32 (fun h -> Int32.sub h keep_height) h)
     |> HMap.update h (fun bmap_opt ->
-      let bmap = Option.value ~default:BMap.empty bmap_opt in
+      let bmap = Option.value ~default:Height_content.empty bmap_opt in
       bmap
-      |> BMap.add bh b
+      |> Height_content.add bh b
       |> Option.some
     )
 end
@@ -601,7 +619,12 @@ module RawTendermintNode = struct
     let block =
       let header =
         (* let state_hash = dummy_state_hash in *)
-        let previous_hash = Hash.dummy in
+        let previous_hash =
+          if Height.(equal height zero) then
+            Hash.dummy
+          else
+            t |> blocks |> Blocks.find_final (Height.predecessor height) |> Option.get
+        in
         let time = t |> clock in
         let network_name = t |> network in
         Block.Header.make ~height ~time ~previous_hash ~network_name

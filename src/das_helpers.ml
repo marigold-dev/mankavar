@@ -211,6 +211,8 @@ module XOption = struct
   let fold'' none some = function
   | None -> none ()
   | Some x -> some x
+
+  let bind' f x = Option.bind x f
 end
 
 module XBytes = struct
@@ -243,7 +245,7 @@ module Index = struct
     let increment t =
       t
       |> map_height Int32.succ
-
+    let predecessor t = t |> map_height Int32.pred
     module Map = XMap.Make(struct type nonrec t = t let compare = compare end)
     let pp ppf x = Format.fprintf ppf "%ld" (x |> get_height_exn)
     let encoding = Encoding.(conv of_int32 to_int32 int32)
@@ -258,6 +260,7 @@ module Index = struct
     val equal : t -> t -> bool
     val zero : t
     val increment : t -> t
+    val predecessor : t -> t
     val pp : Format.formatter -> t -> unit
     val encoding : t Encoding.t
     module Map : module type of XMap.Make(struct type nonrec t = t let compare = compare end)
