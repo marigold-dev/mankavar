@@ -1,13 +1,12 @@
 [@@@warning "-23-34"]
 
 (* TODO:
-  - Only sign hashes
   - Add previous blocks commitments
   - Block validation
   - Pipeline Block balidation
 *)
 
-let hash : bytes -> bytes = fun b -> Digestif.BLAKE2B.(
+let do_hash : bytes -> bytes = fun b -> Digestif.BLAKE2B.(
   b |> digest_bytes |> to_raw_string |> Bytes.of_string
 )
 
@@ -117,7 +116,7 @@ module Block = struct
     tuple_3 Header.encoding Operations.encoding Previous_validation.encoding
   )
   let to_bytes = Encoding.to_bytes encoding
-  let hash : t -> bytes = fun t -> Encoding.to_bytes encoding t |> hash
+  let hash : t -> bytes = fun t -> Encoding.to_bytes encoding t |> do_hash
   let height : t -> Height.t = fun x -> x |> header |> Header.height
 end
 
@@ -133,6 +132,7 @@ module BlockProposal = struct
     tuple_3 Height.encoding Round.Index.encoding Block.encoding
   )
   let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
+  let unsigned_to_hash x = x |> unsigned_to_bytes |> do_hash
 
   type t = {
     unsigned : unsigned ;
@@ -212,6 +212,7 @@ module Prevote = struct
   )
   let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
   let unsigned_pp = pp_unsigned
+  let unsigned_to_hash x = x |> unsigned_to_bytes |> do_hash
 
   type t = {
     unsigned : unsigned ;
@@ -231,6 +232,7 @@ module Precommitment = struct
     tuple_2 Hash.encoding Height.encoding
   )
   let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
+  let unsigned_to_hash x = x |> unsigned_to_bytes |> do_hash
   type t = {
     unsigned : unsigned ;
     precommitter_signature : unsigned Sig.t ; [@printer Sig.pp]
@@ -252,6 +254,7 @@ module Commitment = struct
     tuple_2 Hash.encoding Height.encoding
   )
   let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
+  let unsigned_to_hash x = x |> unsigned_to_bytes |> do_hash
   let unsigned_pp = pp_unsigned
   type t = {
     unsigned : unsigned ;
@@ -269,6 +272,7 @@ module BlockInfo = struct
   }
   [@@deriving ez , show { with_path = false }]
   let block_to_bytes = Block.to_bytes
+  let block_to_hash x = x |> block_to_bytes |> do_hash
 end
 
 module Message = struct
@@ -498,13 +502,12 @@ module RawTendermintNode = struct
   let set_state s t =
     t |> set_step_start_time (t |> clock) |> set_state s
 
-  let sign ~to_bytes t x =
-    Sig.sign ~secret_key:(t |> account |> Addr.secret_key)
-    ~content:x ~to_bytes
-  let check_sig_by_endorser = fun ~content ~to_bytes s t ->
+  let sign t hash =
+    Sig.sign_hash ~hash ~secret_key:(t |> account |> Addr.secret_key) 
+  let check_sig_by_endorser = fun ~hash s t ->
     let pk = Sig.signer s in
     List.mem pk (t |> endorsers) &&
-    Sig.check ~public_key:pk ~signature:s ~content ~to_bytes
+    Sig.check_hash ~hash ~public_key:pk ~signature:s
   
   let unlock t = t |> set_lock Option.none
   let do_lock l t =
@@ -523,7 +526,8 @@ module RawTendermintNode = struct
     let round = t |> round in
     let unsigned = BlockProposal.unsigned_make ~height ~round ~block in
     let proposer_signature =
-      sign ~to_bytes:BlockProposal.unsigned_to_bytes t unsigned |> Sig.get
+      let hash = do_hash @@ BlockProposal.unsigned_to_bytes @@ unsigned in
+      hash |> sign t |> Sig.get
     in
     BlockProposal.make ~unsigned ~proposer_signature
 
@@ -551,16 +555,19 @@ module RawTendermintNode = struct
     let height = t |> height in
     let round = t |> round in
     let unsigned = Prevote.unsigned_make ~content ~height ~round in
-    unsigned |> sign ~to_bytes:Prevote.unsigned_to_bytes t
+    let hash = unsigned |> Prevote.unsigned_to_bytes |> do_hash in
+    hash |> sign t
     |> Sig.get |> Prevote.make_tpl unsigned |> Message.prevote
   
   let do_precommit : t -> Precommitment.block_hash -> Message.t = fun t bh ->
     let unsigned = Precommitment.unsigned_make ~block_hash:bh ~height:(t |> height) in
-    unsigned |> sign ~to_bytes:Precommitment.unsigned_to_bytes t
+    let hash = unsigned |> Precommitment.unsigned_to_bytes |> do_hash in
+    hash |> sign t
     |> Sig.get |> Precommitment.make_tpl unsigned |> Message.precommitment
 
   let do_commit : t -> Commitment.unsigned -> Message.t = fun t unsigned ->
-    unsigned |> sign ~to_bytes:Commitment.unsigned_to_bytes t
+    let hash = unsigned |> Commitment.unsigned_to_bytes |> do_hash in
+    hash |> sign t
     |> Sig.get |> Commitment.make_tpl unsigned |> Message.commitment
 
   type message = Message.t
@@ -607,7 +614,8 @@ module RawTendermintNode = struct
       let round = t |> round in
       BlockProposal.unsigned_make ~height ~round ~block
     in
-    let signed = sign ~to_bytes:BlockProposal.unsigned_to_bytes t unsigned in
+    let hash = unsigned |> BlockProposal.unsigned_to_bytes |> do_hash in
+    let signed = sign t hash in
     let proposer_signature = signed |> Sig.get in
     BlockProposal.make ~unsigned ~proposer_signature
 
@@ -864,56 +872,51 @@ module RawTendermintNode = struct
     m |> Message.destruct 
     ~block_proposal:BlockProposal.(fun x ->
       let signature = x |> proposer_signature in
-      let content = x |> unsigned in
+      let hash = x |> unsigned |> unsigned_to_hash in
       let public_key = signature |> Sig.signer in
-      let to_bytes = unsigned_to_bytes in
 
       is_endorser public_key ;
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      if not @@ Sig.check_hash ~public_key ~hash ~signature
       then nope () ;
       true
     )
     ~prevote:Prevote.(fun x ->
       let signature = x |> prevoter_signature in
-      let content = x |> unsigned in
+      let hash = x |> unsigned |> unsigned_to_hash in
       let public_key = signature |> Sig.signer in
-      let to_bytes = unsigned_to_bytes in
 
       is_endorser public_key ;
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      if not @@ Sig.check_hash ~public_key ~hash ~signature
       then nope () ;
       true
     )
     ~precommitment:Precommitment.(fun x ->
       let signature = x |> precommitter_signature in
-      let content = x |> unsigned in
+      let hash = x |> unsigned |> unsigned_to_hash in
       let public_key = signature |> Sig.signer in
-      let to_bytes = unsigned_to_bytes in
 
       is_endorser public_key ;
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      if not @@ Sig.check_hash ~public_key ~hash ~signature
       then nope () ;
       true
     )
     ~commitment:Commitment.(fun x ->
       let signature = x |> committer_signature in
-      let content = x |> unsigned in
+      let hash = x |> unsigned |> unsigned_to_hash in
       let public_key = signature |> Sig.signer in
-      let to_bytes = unsigned_to_bytes in
 
       is_endorser public_key ;
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      if not @@ Sig.check_hash ~public_key ~hash ~signature
       then nope () ;
       true
     )
     ~block:BlockInfo.(fun x ->
       let signature = x |> endorser_signature in
-      let content = x |> block in
+      let hash = x |> block |> block_to_hash in
       let public_key = signature |> Sig.signer in
-      let to_bytes = block_to_bytes in
 
       is_endorser public_key ;
-      if not @@ Sig.check ~public_key ~content ~signature ~to_bytes
+      if not @@ Sig.check_hash ~public_key ~hash ~signature
       then nope () ;
       true
     )

@@ -14,12 +14,13 @@ end
 
 module RawSignature = struct
   type 'a t = {
-    content : 'a ;
+    content : 'a option ;
     bytes : bytes ;
     signer : RawAddress.t ;
   }
   [@@deriving ez]
 
+  let content x = x |> content |> Option.get
   let compare a b = Int.compare (a |> signer) (b |> signer)
   let equal a b = Int.equal (compare a b) 0
 
@@ -34,12 +35,19 @@ module RawSignature = struct
       f (x|>content)
       RawAddress.pp_public_key
       (RawAddress.public_key @@ signer x) 
-  let get x = x
-  let check = fun ~public_key ~content ~signature ~to_bytes ->
+  let get : 'a signed -> 'a t = fun x -> x
+  let check_raw = fun ~public_key ~content ~signature ~to_hash ->
     RawAddress.public_key_equal (signature |> signer) public_key &&
-    Bytes.equal (to_bytes content) (signature |> bytes)
-  let sign = fun ~secret_key ~content ~to_bytes ->
-    make_tpl content (to_bytes content) secret_key
+    Bytes.equal (to_hash content) (signature |> bytes)
+
+  let check_hash = fun ~public_key ~signature ~hash ->
+    RawAddress.public_key_equal (signature |> signer) public_key &&
+    Bytes.equal hash (signature |> bytes)
+
+  let sign_raw = fun ~secret_key ~content ~to_hash ->
+    make_tpl (Option.some content) (to_hash content) secret_key
+  let sign_hash = fun ~secret_key ~hash ->
+    make_tpl Option.none hash secret_key
 end
 
 module type JOINT = sig
@@ -65,12 +73,18 @@ module type JOINT = sig
     val pp_signed : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a signed -> unit
     val get : 'a signed -> 'a t
     val content : 'a signed -> 'a
-    val check :
+    val check_raw :
       public_key:Address.public_key -> content:'a ->
-      signature:'a t -> to_bytes:('a -> bytes) -> bool
-    val sign :
+      signature:'a t -> to_hash:('a -> bytes) -> bool
+    val check_hash :
+      public_key:Address.public_key ->
+      signature:'a t -> hash:bytes -> bool
+    val sign_raw :
       secret_key:Address.secret_key -> content:'a ->
-      to_bytes:('a -> bytes) -> 'a signed
+      to_hash:('a -> bytes) -> 'a signed
+    val sign_hash :
+      secret_key:Address.secret_key ->
+      hash:bytes -> 'a signed
     val signer : 'a t -> Address.public_key
   end
 end

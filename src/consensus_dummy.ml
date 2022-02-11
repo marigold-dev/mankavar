@@ -87,7 +87,7 @@ module RawBlockProducerNode = struct
   let dummy_block_candidate_signed t =
     let bc = dummy_block_candidate (height t) in
     let secret_key = t |> account |> Addr.secret_key in
-    Sig.sign ~secret_key ~content:bc ~to_bytes:Block.Candidate.to_bytes
+    Sig.sign_raw ~secret_key ~content:bc ~to_hash:Block.Candidate.to_bytes
 
   let noop (t : t) _ = [] , t
 
@@ -135,7 +135,7 @@ module RawBlockProducerNode = struct
     let content = Sig.content bc_signed in
     if not @@ List.exists (Addr.public_key_equal public_key) @@ endorsers t
       then return ([] , t) ;
-    if not @@ Sig.check ~public_key ~signature ~content ~to_bytes:Block.Candidate.to_bytes
+    if not @@ Sig.check_raw ~public_key ~signature ~content ~to_hash:Block.Candidate.to_bytes
       then return ([] , t) ;
     let bc = Sig.content bc_signed in
     if not @@ Height.equal (Block.Candidate.height bc) (height t)
@@ -199,15 +199,15 @@ module RawEndorserNode = struct
     ~block_proposal:(fun bc_signed ->
       let signature = Account.Signature.get bc_signed in
       let bc = Account.Signature.content bc_signed in
-      if not @@ Account.Signature.check
+      if not @@ Account.Signature.check_raw
         ~public_key:(producer t) ~signature ~content:bc
-        ~to_bytes:Block.Candidate.to_bytes
+        ~to_hash:Block.Candidate.to_bytes
         then [] , t
       else (
         let sk = t |> account |> Account.Address.secret_key in
         let signed =
-          Account.Signature.sign
-            ~secret_key:sk ~content:bc ~to_bytes:Block.Candidate.to_bytes
+          Account.Signature.sign_raw
+            ~secret_key:sk ~content:bc ~to_hash:Block.Candidate.to_bytes
         in
         [Send.broadcast @@ Message.endorsement signed] , t
       )
