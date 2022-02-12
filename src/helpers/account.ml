@@ -43,11 +43,16 @@ module RawSignature = struct
   let check_hash = fun ~public_key ~signature ~hash ->
     RawAddress.public_key_equal (signature |> signer) public_key &&
     Bytes.equal hash (signature |> bytes)
-
   let sign_raw = fun ~secret_key ~content ~to_hash ->
     make_tpl (Option.some content) (to_hash content) secret_key
   let sign_hash = fun ~secret_key ~hash ->
     make_tpl Option.none hash secret_key
+  let encoding () : 'a t Encoding.t = Encoding.(
+    conv
+      (fun (x , y) -> make_tpl Option.none x y)
+      (fun x -> x |> destruct |> fun (_ , b , s) -> (b , s))
+    @@ tuple_2 bytes int
+  )
 end
 
 module type JOINT = sig
@@ -65,10 +70,12 @@ module type JOINT = sig
     val generate : unit -> t
   end 
   module Signature : sig
+    (* Contains signature and signer *)
     type 'a t
     val pp : Format.formatter -> 'a t -> unit
     val compare : 'a t -> 'a t -> int
     val equal : 'a t -> 'a t -> bool
+    (* Contains signature, signer and value *)
     type 'a signed
     val pp_signed : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a signed -> unit
     val get : 'a signed -> 'a t
@@ -86,6 +93,7 @@ module type JOINT = sig
       secret_key:Address.secret_key ->
       hash:bytes -> 'a signed
     val signer : 'a t -> Address.public_key
+    val encoding : unit -> 'a t Encoding.t
   end
 end
 

@@ -1,11 +1,11 @@
 [@@@warning "-23-34"]
 
 (* TODO:
-  - Encoding for signatures
-  - Add signature with pk, signature with hash, signature with content
   - Check previous block commitments
   - Block validation
   - Pipeline Block balidation
+  - Use Logs
+  - Logs all bad Option.get
 *)
 
 let do_hash : bytes -> bytes = fun b -> Digestif.BLAKE2B.(
@@ -145,28 +145,35 @@ module Block = struct
 end
 
 module BlockProposal = struct
-  type unsigned = {
-    height : Height.t ;
-    round : Round.Index.t ;
-    block : Block.t ;
-  }
-  [@@deriving ez]
-  let unsigned_encoding = Encoding.(
-    conv (fun (x , y , z) -> unsigned_make_tpl x y z) unsigned_destruct @@
-    tuple_3 Height.encoding Round.Index.encoding Block.encoding
-  )
-  let unsigned_to_bytes = Encoding.to_bytes unsigned_encoding
-  let unsigned_to_hash x = x |> unsigned_to_bytes |> do_hash
+  module Unsigned = struct
+    type t = {
+      height : Height.t ;
+      round : Round.Index.t ;
+      block : Block.t ;
+    }
+    [@@deriving ez]
+    let encoding = Encoding.(
+      conv (fun (x , y , z) -> make_tpl x y z) destruct @@
+      tuple_3 Height.encoding Round.Index.encoding Block.encoding
+    )
+    let to_bytes = Encoding.to_bytes encoding
+    let to_hash x = x |> to_bytes |> do_hash
+  end
 
   type t = {
-    unsigned : unsigned ;
-    proposer_signature : unsigned Sig.t ;
+    unsigned : Unsigned.t ;
+    proposer_signature : Unsigned.t Sig.t ;
   }
   [@@deriving ez]
+
+  let height t = t |> unsigned |> Unsigned.height
+  let block t = t |> unsigned |> Unsigned.block
+  let round t = t |> unsigned |> Unsigned.round
+  let to_unsigned_hash t = t |> unsigned |> Unsigned.to_hash
 
   let pp ppf t =
     Format.fprintf ppf "Block <%a> signed by %a"
-      Height.pp (t |> unsigned |> height)
+      Height.pp (t |> height)
       Addr.pp_public_key (t |> proposer_signature |> Sig.signer)
 end
 
@@ -424,7 +431,6 @@ module RawTendermintNode = struct
         pv |> Precommitment.unsigned
         |> Option.some
       ) else t
-
   end
 
   module Commitments = struct
@@ -449,8 +455,8 @@ module RawTendermintNode = struct
       let sigs' = signature_prepend sig_ sigs in
       (* Format.printf "%d vs %d@;%!" (List.length sigs) (List.length sigs') ; *)
       t |> CMap.add unsigned sigs'
-    let find_opt : Commitment.unsigned -> t -> Commitment.unsigned Sig.t list option = fun h t ->
-
+    let find_opt : Commitment.unsigned -> t -> Commitment.unsigned Sig.t list option
+    = fun h t ->
       CMap.find_opt h t
   end
 
@@ -476,6 +482,8 @@ module RawTendermintNode = struct
       if List.length sigs >= threshold
       then t |> set_committed_block @@ Option.some bh
       else t
+
+    let find_opt u t = t |> commits |> Commitments.find_opt u
 
   end
 
@@ -545,9 +553,9 @@ module RawTendermintNode = struct
   let propose_block : Block.t -> t -> BlockProposal.t = fun block t ->
     let height = t |> height in
     let round = t |> round in
-    let unsigned = BlockProposal.unsigned_make ~height ~round ~block in
+    let unsigned = BlockProposal.Unsigned.make ~height ~round ~block in
     let proposer_signature =
-      let hash = do_hash @@ BlockProposal.unsigned_to_bytes @@ unsigned in
+      let hash = do_hash @@ BlockProposal.Unsigned.to_bytes @@ unsigned in
       hash |> sign t |> Sig.get
     in
     BlockProposal.make ~unsigned ~proposer_signature
@@ -649,9 +657,9 @@ module RawTendermintNode = struct
     in
     let unsigned =
       let round = t |> round in
-      BlockProposal.unsigned_make ~height ~round ~block
+      BlockProposal.Unsigned.make ~height ~round ~block
     in
-    let hash = unsigned |> BlockProposal.unsigned_to_bytes |> do_hash in
+    let hash = unsigned |> BlockProposal.Unsigned.to_bytes |> do_hash in
     let signed = sign t hash in
     let proposer_signature = signed |> Sig.get in
     BlockProposal.make ~unsigned ~proposer_signature
@@ -695,7 +703,7 @@ module RawTendermintNode = struct
         t |> set_state StepState.prevote_empty
       )
       ~proposed:(fun bc ->
-        let hash = bc |> BlockProposal.unsigned |> BlockProposal.block |> Block.hash in
+        let hash = bc |> BlockProposal.block |> Block.hash in
         [hash |> Prevote.block |> do_prevote_current t |> Send.broadcast] ,
         t |> set_state StepState.prevote_empty
       )
@@ -802,6 +810,14 @@ module RawTendermintNode = struct
     let noop x = return @@ noop t x in
     (* Format.printf "Receiving block proposal@;%!" ; *)
 
+    (* Check Previous Commitments *) (
+      XBool.do_if_true (not @@ Height.equal (t |> height) Height.zero) @@ fun () ->
+      let bh = bp |> BlockProposal.block |> Block.hash in
+      let uc = Commitment.unsigned_make_tpl bh (Height.predecessor @@ height t) in
+      let cs = t |> commitments |> CommitmentState.find_opt uc |> Option.get in
+      assert (List.length cs >= commitment_threshold)
+    ) ;
+
     t
     |> state
     |> StepState.get_proposal_opt |> XOption.value' noop
@@ -811,7 +827,7 @@ module RawTendermintNode = struct
     |> fun ps ->
       [Send.gossip @@ Message.block_proposal bp] ,
       t
-      |> map_blocks (Blocks.add (bp |> BlockProposal.unsigned |> BlockProposal.block))
+      |> map_blocks (Blocks.add (bp |> BlockProposal.block))
       |> set_state @@ StepState.proposal ps
 
   let process_prevote t pv =
@@ -890,7 +906,7 @@ module RawTendermintNode = struct
 
   let get_height : message -> t -> Height.t = fun m _ ->
     m |> Message.destruct 
-    ~block_proposal:BlockProposal.(fun x -> x |> unsigned |> height)
+    ~block_proposal:BlockProposal.(fun x -> x |> height)
     ~prevote:Prevote.(fun x -> x |> unsigned |> height)
     ~precommitment:Precommitment.(fun x -> x |> unsigned |> height)
     ~commitment:Commitment.(fun x -> x |> unsigned |> height)
@@ -909,7 +925,7 @@ module RawTendermintNode = struct
     m |> Message.destruct 
     ~block_proposal:BlockProposal.(fun x ->
       let signature = x |> proposer_signature in
-      let hash = x |> unsigned |> unsigned_to_hash in
+      let hash = x |> to_unsigned_hash in
       let public_key = signature |> Sig.signer in
 
       is_endorser public_key ;
