@@ -1,0 +1,11 @@
+(library
+ (name das_vm)
+ (libraries
+  das_helpers
+ )
+ (preprocess
+  (pps
+   ppx_woo
+  )
+ )
+)

@@ -1,7 +1,6 @@
 [@@@warning "-23-34"]
 
 (* TODO:
-  - Check previous block commitments
   - Block validation
   - Pipeline Block balidation
   - Use Logs

@@ -1,0 +1,9 @@
+(test
+ (name das_vm_tests)
+ (libraries
+  das_vm
+
+  ;global
+  alcotest
+ )
+)
