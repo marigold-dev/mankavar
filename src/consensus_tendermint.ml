@@ -1,13 +1,5 @@
 [@@@warning "-23-34"]
 
-(* TODO:
-  - Block validation
-  - Pipeline Block balidation
-  - Use Logs
-  - Logs all bad Option.get
-  - Persist Storage
-*)
-
 let do_hash : bytes -> bytes = fun b -> Digestif.BLAKE2B.(
   b |> digest_bytes |> to_raw_string |> Bytes.of_string
 )
