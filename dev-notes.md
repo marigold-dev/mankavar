@@ -112,9 +112,9 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
 # TODOs
 
 - Consensus
-  X Dummy Consensus
+  - X Dummy Consensus
   - Tendermint
-    X Basic
+    - X Basic
     - Way more tests
     - Block validation
     - Pipeline Block balidation
@@ -122,9 +122,9 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
     - Logs all bad Option.get
   - Something more alien, like Avalanche
 - Node
-  X Dummy Consensus Node
-  X Tendermint Node
-  X Dead Node
+  - X Dummy Consensus Node
+  - X Tendermint Node
+  - X Dead Node
   - Other behaviors
     - Faulty Nodes
     - Single Deviation from regular node Node
@@ -137,9 +137,9 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
   - Gossip algorithm
   - Change topology of the network on the fly
 - VM
-  X Basic VM
-  X Parametrized with externals
-  X Basic higher level lang compiling to the VM
+  - X Basic VM
+  - X Parametrized with externals
+  - X Basic higher level lang compiling to the VM
   - Make it parallel
   - Trace
   - Refutation
