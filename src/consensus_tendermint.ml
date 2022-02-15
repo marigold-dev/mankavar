@@ -5,6 +5,7 @@
   - Pipeline Block balidation
   - Use Logs
   - Logs all bad Option.get
+  - Persist Storage
 *)
 
 let do_hash : bytes -> bytes = fun b -> Digestif.BLAKE2B.(

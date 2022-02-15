@@ -3,10 +3,14 @@ type variable = string
 type op1 = Not
 [@@deriving ez]
 
-type op2 =
-| Add | Sub | Mul | Div
-| And | Or
-[@@deriving ez]
+module Op2 = struct
+  type t =
+  | Add | Sub | Mul | Div
+  | And | Or
+  [@@deriving ez]
+end
+type op2 = Op2.t
+
 
 type expression =
 | Literal of int64
@@ -31,3 +35,10 @@ type function_ = {
 
 type program = function_ list
 
+let add x y = call_op2 Op2.Add x y
+
+let expression_to_program e = [
+  function__make_tpl "main" [
+    return e ;
+  ]
+]

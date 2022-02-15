@@ -31,7 +31,7 @@ module FunctionEnvironment = struct
   (* Pushes function `v` that is `l` lines long *)
   let push v l t : t =
     t
-    |> map_content (fun lst -> (v , l + (last t)) :: lst)
+    |> map_content (fun lst -> (v , last t) :: lst)
     |> map_last (fun i -> i + l)
 end
 type function_environment = FunctionEnvironment.t
@@ -155,7 +155,7 @@ let compile_program
       compile_expression !fenv Environment.empty @@
       I.application "main" (I.literal 0L)
     in
-    fun_code @ run
+    fun_code @ run @ [ O.halt ]
   in
   let code = preprocess pre_code in
   let start_pointer = FunctionEnvironment.last !fenv in

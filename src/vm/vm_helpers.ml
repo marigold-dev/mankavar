@@ -15,6 +15,7 @@ module Value = struct
   let zero = Int64.zero
   let of_int = Int64.of_int
   module Map = Map.Make(Int64)
+  let pp ppf = Format.fprintf ppf "%Ld"
 end
 
 module Stack = struct
@@ -42,4 +43,18 @@ module Stack = struct
   let drop t i =
     t.position <- t.position - i
   [@@inline]
+
+  let pp ppf s =
+    let print x = Format.fprintf ppf x in
+    let { content ; position } = s in
+    print "@[" ;
+    for i = 0 to position do
+      print "%a" Value.pp content.(i) ;
+      if i mod 10 = 0 then (
+        print "(%d)" i ;
+      ) ;
+      print "@," ;
+    done ;
+    print "@]" ;
+    ()
 end

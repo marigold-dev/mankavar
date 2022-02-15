@@ -41,16 +41,16 @@ let eval_op2 op v1 v2 =
 
 type continue =
 | Continue
+| Jumped
 | Stop
 let step custom : _ state -> continue = fun s ->
   match Array.get s.instructions (s.instruction_pointer |> Int64.to_int)  with
-  | Jump r -> goto s (get_register s r) ; Continue
-  | Jump_value v -> goto s v ; Continue
+  | Jump r -> goto s (get_register s r) ; Jumped
+  | Jump_value v -> goto s v ; Jumped
   | JumpGez (r1 , r2) -> (
     if Value.gez (get_register s r1)
-    then goto s (get_register s r2)
-    else next s ;
-    Continue
+    then (goto s (get_register s r2) ; Jumped)
+    else Continue
   )
   | Stack_push r ->
     Stack.push s.stack (get_register s r) ;
@@ -81,18 +81,36 @@ let step custom : _ state -> continue = fun s ->
   | Compile_time _ -> .
 [@@inline]
 
-let eval custom : program -> _ -> _ = fun p m ->
+let eval custom ?hook : program -> _ -> _ = fun p m ->
+  let do_hook state =
+    match hook with
+    | None -> ()
+    | Some hook -> hook state
+  in
   let (code , ip) = program_destruct p in
   let code' = Array.of_list code in
   let state = state_empty code' (Value.of_int ip) m in
   let r = ref Continue in
-  while !r = Continue do
+  while !r <> Stop do
+    do_hook state ;
     r := step custom state ;
+    if !r = Continue then next state ;
   done ;
-  state.memory
+  do_hook state ;
+  state
 
 module ReadWrite = struct
   type memory = Value.t VMap.t
+  let pp ppf m =
+    let print x = Format.fprintf ppf x in
+    let lst = m |> VMap.to_seq |> List.of_seq in
+    print "@[" ;
+    lst |> List.iter (fun (k , v) -> (
+      print "%a -> %a@;" Value.pp k Value.pp v
+    )) ;
+    print "@]" ;
+    ()
+
   let custom state i = match i with
   | 0 ->
     set_register state B @@
