@@ -34,6 +34,60 @@ As such, it is very important to make the codebase as modular and abstract as po
 As a direct consequence: Everything is Broken.
 There are **tests**, here and there, that are mostly meant as scaffolding to build upon. Expect nothing beyond the tests to work.
 
+# Theory
+
+Let's explain various pieces, in theory, completely disconnected from their implementation here.
+
+## Stuff with already existing good explanations
+
+### Tendermint
+
+Tendermint is a PBFT-like consensus algorithm:
+- It requires a 2/3rd honest majority.
+- If a 1/3rd of the nodes are dead, it stops.
+- It has 2 block finality, which each block taking 3 (+1) rounds, each taking a little more than the bottom quartile of network ping.
+- Its finality can be made adaptative, so it depends on the ping of the network.
+- If the changes in validators are witnessable by the block headers, it is a mostly objective consensus. You can witness the consensus without being part of it, and have good light clients and bridges.
+
+More on [its whitepaper](https://tendermint.com/static/docs/tendermint.pdf)
+
+### Optimistic Rollups (ORU)
+
+ORUs are a scalability solution for blockchains:
+- All the operations are available (usually, by having them posted on the main chain)
+- Executors execute those operations. And then post commitments to the results of those operations on the mainchain.
+- Validators check that those commitments are correct. If one of the commitment is not correct, validators have a deadline by which they must have submitted a proof they the commitment was incorrect.
+- Past the deadline, we consider the commitments final.
+
+More on [EthHub](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/optimistic_rollups/)
+
+### Data Availability Sharding (DAS)
+
+DAS is an enhancer for ORUs. With ORUs, all blockchain nodes need to download all operations. With DAS, only enough nodes download each operation to ensure rendundancy.
+It works with cryptomagic and has a relatively low space overhead. Unfortunately, it costs quite a bit of runtime, the more data needs to be sharded.
+
+More on [a Hackmd from Vitalik](https://hackmd.io/@vbuterin/sharding_proposal)
+
+## Plasma
+
+Plasma is an approach that was popular a couple of years ago. [It is now mostly dead, and was replaced by ORU instead.](https://cointelegraph.com/news/did-ethereum-silently-give-up-on-plasma)
+
+The main idea behind Plasma was:
+- Represents assets in a UTXO format instead of a ledger one
+- Have people owning a UTXO keep track of their belonging
+- If the Plasma operator misrepresents the ownership of your UTXO, withdraw it before his misrepresentation is finalized
+
+The main problems behind Plasma were:
+1. The mass exit problem: what if the operator misrepresents the ownership of **all** the UTXOs? Then everyone should withdraw them. The problem is that the network won't have the bandwidth to allow it, and some will necessarily loose their assets in the process.
+2. The memory ownership problem: each piece of memory belongs to single person. When you only do transactions with UTXOs, it's ok, but this prevents more advanced smart-contracts from taking place. For instance, who should own the state of a Uniswap DEX?
+
+If you think about it, ORUs solve both those problems: basically, everyone is responsible for all the space.
+
+The goal here is thus to synthesize ORUs and Plasma. (Plosru? ORSMA?)
+
+Strongly recommended readings here are about Plasma MVP, a simple version of Plasma. The first one is [from LearnPlasma](https://www.learnplasma.org/en/learn/mvp.html), and the second one from [EthResearch](https://ethresear.ch/t/minimal-viable-plasma/426).
+
+
 # Current Architecture
 
 ## Virtual Machine
