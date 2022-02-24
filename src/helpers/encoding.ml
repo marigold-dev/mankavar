@@ -29,6 +29,7 @@ let pair = tuple_2
 let conv forth back x = Conv (forth , back , x)
 let int = conv Int64.to_int Int64.of_int int64
 let list x = List x
+let array a = conv (Array.of_list) (Array.to_list) @@ list a
 let dummy default = conv (fun () -> default) (fun _ -> ()) unit
 
 module To_bytes = struct

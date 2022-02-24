@@ -35,7 +35,8 @@ let make_tpl prefix : W.record -> P.structure_item list = fun property_declarati
     e_fun label expr
   in
   let init =
-    let aux : W.labelled_record_field -> (string * P.expression) = fun lr ->
+    let aux : W.labelled_record_field -> (string * P.expression)
+    = fun lr ->
       let (label , _) = lr in
       (label , e_var label)
     in
@@ -44,6 +45,25 @@ let make_tpl prefix : W.record -> P.structure_item list = fun property_declarati
   in
   let body = List.fold_right f lts init in
   let name = prefix ^ "make_tpl" in
+  [ declaration ~name ~body ]
+
+let make_tpl' prefix
+: W.record -> P.structure_item list
+= fun property_declarations ->
+  let lts = SMap.to_kv_list property_declarations in
+  let lts = List.sort (fun (_ , a) (_ , b) -> a.W.index - b.W.index) lts in
+  let init =
+    let aux
+    : W.labelled_record_field -> (string * P.expression)
+    = fun lr ->
+      let (label , _) = lr in
+      (label , e_var label)
+    in
+    let lst = List.map aux lts in
+    e_record lst
+  in
+  let body = e_funs' (List.map (fun (name , _) -> name) lts) init in
+  let name = prefix ^ "make_tpl'" in
   [ declaration ~name ~body ]
 
 let destruct_tpl prefix : W.record -> P.structure_item list = fun property_declarations ->

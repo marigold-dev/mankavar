@@ -1,0 +1,6 @@
+(library
+ (name do_hash)
+ (libraries
+  digestif
+ )
+)

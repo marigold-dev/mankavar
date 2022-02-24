@@ -1,6 +1,7 @@
 [@@@warning "-23-34"]
 
 open Das_helpers
+open Das_network
 
 module Send = Node.Send
 module TCQ = TaskClockedQueue

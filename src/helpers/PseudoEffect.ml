@@ -18,3 +18,8 @@ let fail_opt f =
   returner @@ fun { return } ->
   let fail () = return None in
   Option.some @@ f { fail }
+
+let failer f =  
+  returner @@ fun { return } ->
+  let fail x = return @@ Result.error x in
+  Result.ok @@ f { fail }

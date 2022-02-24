@@ -2,6 +2,7 @@ module Account = Account
 module PseudoEffect = PseudoEffect
 module Encoding = Encoding
 module XOption = XOption
+module Linear_state = Linear_state
 
 let tuple2 x y = (x , y)
 let tuple3 x y z = (x , y, z)
@@ -9,6 +10,48 @@ let tuple3 x y z = (x , y, z)
 module XBool = struct
   let do_if_true b f = if b then f ()
 end
+
+module XInt64 = struct
+  let compare = Int64.compare
+  let (<) (a : Int64.t) b = a < b
+  let (>) (a : Int64.t) b = a > b
+end
+
+module XBytes = struct
+  let pp_char ppf c = Format.fprintf ppf "%x" @@ Char.code c
+  let pp ppf b =
+    Bytes.iter (pp_char ppf) b
+end
+
+module Hash : sig
+  type 'a t
+  val make : ('a -> bytes) -> 'a -> 'a t
+  val to_bytes : 'a t -> bytes
+  val dummy : 'a t
+  val encoding : 'a t Encoding.t
+  val compare : 'a t -> 'a t -> int
+  val pp : 'any -> Format.formatter -> 'a t -> unit
+  val pp' : Format.formatter -> 'a t -> unit
+end = struct
+  type 'a t = bytes
+  let make f x = f x
+  let to_bytes x = x
+  let dummy = Bytes.empty
+  let encoding = Encoding.bytes
+  let pp' = XBytes.pp
+  let pp = fun _ -> pp'
+  let compare = Bytes.compare
+end
+type 'a hash = 'a Hash.t
+
+module Hash' = struct
+  type t = bytes
+  let dummy = Bytes.empty
+  let encoding = Encoding.bytes
+  let pp = XBytes.pp
+  let compare = Bytes.compare
+end
+type hash' = Hash'.t
 
 module XPtime = struct
   open Ptime
@@ -64,6 +107,52 @@ module XPtime = struct
   let pp_ms = pp_human ~frac_s:3 ()
 end
 
+module XList = struct
+  (* List.length lst >= 1 *)
+  let rec last lst =
+    match lst with
+    | [] -> assert false
+    | [ x ] -> x
+    | _ :: tl -> last tl
+
+  let is_sorted cmp =
+    let rec aux lst =
+      match lst with
+      | [] -> true
+      | [ _ ] -> true
+      | x :: y :: tl -> cmp x y >= 0 && aux (y :: tl)
+    in
+    aux
+
+  (*
+    Find following elements matching a predicate
+    find_follow (fun a b -> b - a = 4) [ 1 ; 2 ; 4 ; 8 ; 16 ] = Some (4 , 8)
+    find_follow (fun a b -> b - a = 3) [ 1 ; 2 ; 4 ; 8 ; 16 ] = None
+  *)
+  let find_follow f =
+    let rec aux lst =
+      match lst with
+      | [] -> None
+      | [ _ ] -> None
+      | x :: y :: tl -> if f x y then Some (x , y) else aux (y :: tl)
+    in
+    aux
+
+  (*
+    Check if all following elements match a predicate
+    foralli_follow (fun i a b -> a + i = b) [ 0 ; 0 ; 1 ; 3 ; 6 ; 10] = true
+    foralli_follow (fun i a b -> a + i = b) [ 0 ; 0 ; 1 ; 3 ; 4 ; 9] = false
+  *)
+  let foralli_follow f =
+    let rec aux i lst =
+      match lst with
+      | [] -> true
+      | [ _ ] -> true
+      | x :: y :: tl -> if f i x y then aux (i + 1) (y :: tl) else false
+    in
+    aux 0
+end
+
 module XMap = struct
   module type S = sig
     include Map.S
@@ -82,20 +171,6 @@ module XMap = struct
       |> List.to_seq
       |> of_seq
   end
-end
-
-module XBytes = struct
-  let pp_char ppf c = Format.fprintf ppf "%x" @@ Char.code c
-  let pp ppf b =
-    Bytes.iter (pp_char ppf) b
-end
-
-module Hash = struct
-  type t = Bytes.t
-  let compare : t -> t -> int = Bytes.compare
-  let pp = XBytes.pp
-  let encoding : t Encoding.t = Encoding.bytes
-  let dummy = Bytes.empty
 end
 
 module Index = struct

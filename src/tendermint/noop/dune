@@ -1,0 +1,4 @@
+(library
+ (name das_tendermint_noop)
+ (implements das_tendermint)
+)

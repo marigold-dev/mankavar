@@ -71,6 +71,7 @@ module Make(Params : Woo_helpers.PARAMS) = struct
           let setters = Properties.setters record in
           let maker = Record.make prefix record in
           let maker_tpl = Record.make_tpl prefix record in
+          let maker_tpl' = Record.make_tpl' prefix record in
           let destruct_tpl = Record.destruct_tpl prefix record in
           []
           @ prop_types
@@ -79,6 +80,7 @@ module Make(Params : Woo_helpers.PARAMS) = struct
           @ setters
           @ maker
           @ maker_tpl
+          @ maker_tpl'
           @ destruct_tpl
         )
         | W.T_core _ -> []

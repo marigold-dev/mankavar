@@ -51,15 +51,27 @@ Tendermint is a PBFT-like consensus algorithm:
 
 More on [its whitepaper](https://tendermint.com/static/docs/tendermint.pdf)
 
-### Optimistic Rollups (ORU)
+### Rollups (RU)
 
-ORUs are a scalability solution for blockchains:
+RUs are a scalability solution for blockchains:
 - All the operations are available (usually, by having them posted on the main chain)
 - Executors execute those operations. And then post commitments to the results of those operations on the mainchain.
 - Validators check that those commitments are correct. If one of the commitment is not correct, validators have a deadline by which they must have submitted a proof they the commitment was incorrect.
 - Past the deadline, we consider the commitments final.
 
 More on [EthHub](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/optimistic_rollups/)
+
+There are multiple ways to replay stuff:
+- Literally replay the entire transition from H1 to H2 (TORU)
+  - This is the most straigthforward one
+  - This requires data availability for the data touched between H1 and H2, which can be huge
+  - This can be very fast: replay is non-interactive
+- Find the smallest increment that can be replayed (SCORU)
+  - Very slow: replay is very interactive
+  - Requires no data-availability (only between an increment, which is bounded)
+- Don't replay (ZKRU)
+  - Expensive
+  - Extremely fast: no replay
 
 ### Data Availability Sharding (DAS)
 
@@ -136,6 +148,8 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
   X Dummy Network
   - Gossip algorithm
   - Change topology of the network on the fly
+- Smart Contracts Runtime Environment
+  - Memory Blocks instead of cells
 - VM
   - X Basic VM
   - X Parametrized with externals
@@ -149,6 +163,7 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
     - Duplicate Tendermint's code?
     - Functorize Tendermint's code?
     - Dune Virtual Libraries?
+  - Pre-play k next moves for stronger resistance to censorship
 - Storage
   - Everything in memory and simulated for now
 - Network

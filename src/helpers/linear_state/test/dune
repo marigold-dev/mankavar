@@ -1,0 +1,9 @@
+(test
+ (name test_linear_state)
+ (libraries
+  ; local
+  linear_state
+  ; global
+  alcotest
+ )
+)

@@ -1,0 +1,12 @@
+(library
+ (name das_tendermint_sc_raw)
+ (libraries
+  das_helpers
+  das_vm
+ )
+ (preprocess
+  (pps
+   ppx_woo
+  )
+ )
+)

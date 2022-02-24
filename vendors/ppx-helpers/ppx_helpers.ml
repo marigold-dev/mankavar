@@ -38,6 +38,7 @@ module Generate(Params : PARAMS) = struct
     | [ single ] -> single
     | lst -> A.pexp_tuple lst
   let p_var x = A.pvar x
+  let p_tuple lst = A.ppat_tuple lst
   let p_record_pun lst =
     A.ppat_record
       (List.map (fun (x : string) -> (lident x , p_var x)) lst)
@@ -48,6 +49,8 @@ module Generate(Params : PARAMS) = struct
     A.pexp_fun label default (p_var var) body
   let e_funs vars body =
     List.fold_right e_fun vars body
+  let e_funs' ?(label = P.Nolabel) ?default vars body =
+    A.pexp_fun label default (p_tuple @@ List.map p_var vars) body
   let e_fun_pat ?(label = P.Nolabel) ?default pat body =
     A.pexp_fun label default pat body
   let e_named_fun var body =

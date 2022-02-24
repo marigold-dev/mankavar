@@ -1,6 +1,8 @@
 (library
  (name das_helpers)
  (libraries
+  ; local
+  linear_state
   ; ocaml
   unix
   ; global

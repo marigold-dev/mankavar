@@ -1,0 +1,8 @@
+(test
+ (name tendermint_test)
+ (libraries
+  ; local
+  das_tendermint_noop
+  ; global
+  alcotest
+ ))

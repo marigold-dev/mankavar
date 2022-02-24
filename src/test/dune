@@ -2,6 +2,7 @@
  (name das_test)
  (libraries
   das
+  das_network
 
   alcotest
  )

@@ -1,15 +1,7 @@
 (library
- (name das)
+ (name das_network)
  (libraries
-  ; local
   das_helpers
-  das_network
-
-  ; ocaml
-  unix
-  ; global
-  ptime
-  digestif
  )
  (preprocess
   (pps

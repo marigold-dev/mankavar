@@ -1,0 +1,8 @@
+(test
+ (name das_tendermint_sc_test)
+ (libraries
+  das_tendermint_sc
+
+  alcotest
+ ) 
+)

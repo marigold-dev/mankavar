@@ -1,0 +1,7 @@
+(library
+ (name das_tendermint_sc)
+ (implements das_tendermint)
+ (libraries
+  das_tendermint_sc_raw
+ )
+)
