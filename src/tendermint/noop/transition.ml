@@ -3,6 +3,7 @@ open Das_helpers
 module Operation = struct
   type t = unit
   let get_max_gas () = 1L
+  (* let get_height () = Height.zero *)
   let encoding : t Encoding.t = Encoding.unit
 end
 

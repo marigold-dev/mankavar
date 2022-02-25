@@ -14,6 +14,7 @@ end
 module XInt64 = struct
   let compare = Int64.compare
   let (<) (a : Int64.t) b = a < b
+  let (<=) (a : Int64.t) b = a <= b
   let (>) (a : Int64.t) b = a > b
 end
 

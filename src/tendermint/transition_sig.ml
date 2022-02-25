@@ -4,9 +4,7 @@ module type MAIN = sig
 
 module Operation : sig
   type t
-  (*
-  max gas that can be executed to process the operation
-  *)
+  (* max gas that can be used to process the operation *)
   val get_max_gas : t -> int64
   val encoding : t Encoding.t
 end

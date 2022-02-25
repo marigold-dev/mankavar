@@ -17,24 +17,10 @@ let prevote_threshold = nb_endorsers - max_byzantine
 let precommitment_threshold = nb_endorsers - max_byzantine
 let commitment_threshold = nb_endorsers - max_byzantine
 
-
-
 open Structs
 
 module Message = Message
 module Tendermint_state = Tendermint_state
-
-(* module RawMempoolNode = struct
-  (* Discard more operations *)
-  let max_size = 100_000
-
-  type t = Transition.Operation.t list
-
-  let add 
-end
-
-module MempoolNodeWitness : Node.TYPE = RawMempoolNode *)
-
 
 module RawTendermintNode = struct
   (*
