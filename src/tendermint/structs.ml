@@ -67,16 +67,7 @@ module Block = struct
       tuple_4 string Height.encoding XPtime.encoding Hash'.encoding
     )
   end
-  module Operations = struct
-    type t = {
-      (* slots_headers : Slot.Header.t Slot.Map.t ; *)
-      operations : Operation.t list ;
-    }
-    [@@deriving ez]
-    let encoding : t Encoding.t = Encoding.(
-      conv make_tpl destruct @@ list Operation.encoding
-    )
-  end
+  
   module Previous_commitments = struct
     (*
       Commitment from previous blocks
@@ -91,7 +82,7 @@ module Block = struct
   end
   type t = {
     header : Header.t ;
-    operations : Operations.t ;
+    operations : Bunch.t ;
     previous_commitments : Previous_commitments.t ;
   }
   [@@deriving ez]
@@ -99,8 +90,8 @@ module Block = struct
     Format.fprintf ppf "Block#%a"
       Height.pp (t |> header |> Header.height)
   let encoding = Encoding.(
-    conv (fun (x,y,z) -> make_tpl x y z) destruct @@
-    tuple_3 Header.encoding Operations.encoding Previous_commitments.encoding
+    conv make_tpl' destruct @@
+    tuple_3 Header.encoding Bunch.encoding Previous_commitments.encoding
   )
   let to_bytes = Encoding.to_bytes encoding
   let hash : t -> bytes = fun t -> Encoding.to_bytes encoding t |> do_hash

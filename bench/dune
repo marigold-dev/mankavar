@@ -1,0 +1,12 @@
+(executable
+ (name bench_misc)
+ (libraries
+  mtime
+  mtime.clock.os
+ )
+)
+
+(rule
+ (alias bench)
+ (action (run ./bench_misc.exe))
+)

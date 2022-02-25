@@ -24,6 +24,18 @@ open Structs
 module Message = Message
 module Tendermint_state = Tendermint_state
 
+(* module RawMempoolNode = struct
+  (* Discard more operations *)
+  let max_size = 100_000
+
+  type t = Transition.Operation.t list
+
+  let add 
+end
+
+module MempoolNodeWitness : Node.TYPE = RawMempoolNode *)
+
+
 module RawTendermintNode = struct
   (*
     Tendermint Node
@@ -44,15 +56,16 @@ module RawTendermintNode = struct
     commitments : CommitmentState.t ;
     blocks : Blocks.t ;
     step_start_time : Ptime.t ;
-    state : StepState.t ;
+    step_state : StepState.t ;
+    chain_state : Transition.State.t ;
   }
   [@@deriving ez]
 
   let pp_id : _ -> t -> unit = fun ppf t ->
     t |> account |> Addr.public_key |> Addr.pp_public_key ppf
 
-  let set_state s t =
-    t |> set_step_start_time (t |> clock) |> set_state s
+  let set_step_state s t =
+    t |> set_step_start_time (t |> clock) |> set_step_state s
 
   let sign t hash =
     Sig.sign_hash ~hash ~secret_key:(t |> account |> Addr.secret_key) 
@@ -126,16 +139,17 @@ module RawTendermintNode = struct
 
   let empty ~network clock endorsers account : t =
     let height = Height.zero in
-    let state = StepState.proposal @@ ProposalState.no_proposal in
+    let step_state = StepState.proposal @@ ProposalState.no_proposal in
     let commitments = CommitmentState.empty in
     let step_start_time = clock in
     let lock = Option.none in
     let round = Round.Index.zero in
     let blocks = Blocks.empty in
+    let chain_state = Transition.State.empty in
     make
-      ~account ~clock ~endorsers ~height ~state
+      ~account ~clock ~endorsers ~height ~step_state
       ~commitments ~blocks ~lock ~round ~step_start_time
-      ~network
+      ~network ~chain_state
 
   (*
     This should increase as round increases to allow for bad networks. Adaptative.
@@ -146,7 +160,7 @@ module RawTendermintNode = struct
 
   let noop (t : t) _ = [] , t
 
-  let dummy_state_hash = Hash'.dummy
+  let dummy_step_state_hash = Hash'.dummy
 
   let dummy_block_proposal : t -> BlockProposal.t = fun t ->
     let height = t |> height in
@@ -159,12 +173,12 @@ module RawTendermintNode = struct
           t |> blocks |> Blocks.find_final prev_height |> Option.get
       in
       let header =
-        (* let state_hash = dummy_state_hash in *)
+        (* let step_state_hash = dummy_step_state_hash in *)
         let time = t |> clock in
         let network_name = t |> network in
         Block.Header.make ~height ~time ~previous_hash:prev_hash ~network_name
       in
-      let operations = Block.Operations.make_tpl [] in
+      let operations = Transition.Bunch.dummy in
       let previous_commitments =
         let prevs =
           if Height.(equal height zero) then
@@ -204,11 +218,11 @@ module RawTendermintNode = struct
         )
       in
       [Send.broadcast @@ Message.block_proposal block_proposal] ,
-      t |> set_state
+      t |> set_step_state
         (StepState.proposal @@ ProposalState.proposed block_proposal)
     ) else (
       [] ,
-      t |> set_state
+      t |> set_step_state
         (StepState.proposal ProposalState.no_proposal)
     )
 
@@ -217,18 +231,18 @@ module RawTendermintNode = struct
     t |> lock |> Option.fold
     ~some:(fun l ->
       [Lock.content l |> Prevote.content |> do_prevote_current t |> Send.broadcast] ,
-      t |> set_state StepState.prevote_empty    
+      t |> set_step_state StepState.prevote_empty    
     )
     ~none:(
       s |> ProposalState.destruct
       ~no_proposal:(
         [Prevote.nil |> do_prevote_current t |> Send.broadcast] ,
-        t |> set_state StepState.prevote_empty
+        t |> set_step_state StepState.prevote_empty
       )
       ~proposed:(fun bc ->
         let hash = bc |> BlockProposal.block |> Block.hash in
         [hash |> Prevote.block |> do_prevote_current t |> Send.broadcast] ,
-        t |> set_state StepState.prevote_empty
+        t |> set_step_state StepState.prevote_empty
       )
     )
 
@@ -238,7 +252,7 @@ module RawTendermintNode = struct
     ~none:(fun () ->
       (* Format.printf "No threshold@;%!" ; *)
       [] ,
-      t |> set_state @@ StepState.precommitment PrecommitmentState.empty
+      t |> set_step_state @@ StepState.precommitment PrecommitmentState.empty
     )
     ~some:(fun lproof ->
       (* Format.printf "Lock:%a@;%!" Lock.pp lproof ; *)
@@ -247,14 +261,14 @@ module RawTendermintNode = struct
         (* Format.printf "nil lock@;%!" ; *)
         [] ,
         t
-        |> set_state @@ StepState.precommitment PrecommitmentState.empty
+        |> set_step_state @@ StepState.precommitment PrecommitmentState.empty
         |> set_lock Option.none
       )
       ~block:(fun bp ->
         (* Format.printf "block lock@;%!" ; *)
         [bp |> do_precommit t |> Send.broadcast] ,
         t
-        |> set_state @@ StepState.precommitment PrecommitmentState.empty
+        |> set_step_state @@ StepState.precommitment PrecommitmentState.empty
         |> set_lock @@ Option.some lproof
       )
     )
@@ -271,7 +285,7 @@ module RawTendermintNode = struct
       let h = Precommitment.block_hash pc in
       [Commitment.unsigned_make_tpl h (t |> height) |> do_commit t |> Send.broadcast] ,
       t
-      |> set_state @@ StepState.commitment ()
+      |> set_step_state @@ StepState.commitment ()
     ))
 
   let commit_timeout t () =
@@ -286,11 +300,9 @@ module RawTendermintNode = struct
   |> fun t ->
   [] , t
 
-
-
   (* TODO: Add round drift for bad network *)
   let step_timeout t =
-    t |> state |> StepState.destruct
+    t |> step_state |> StepState.destruct
     ~proposal:(fun _ -> step_time_ms)
     ~prevote:(fun _ -> step_time_ms)
     ~precommitment:(fun _ -> step_time_ms)
@@ -308,7 +320,7 @@ module RawTendermintNode = struct
     Format.printf "Timeout: %a@;%!" Ptime.Span.pp (t |> step_timeout) ; *)
     (* let print_lock s t =
       Format.printf "%s Lock? %b@;%!" s (
-        t |> state
+        t |> step_state
         |> StepState.get_prevote_opt |> Option.fold ~none:false ~some:(fun x -> x
           |> PrevoteState.threshold |> Option.is_some
         )
@@ -319,7 +331,7 @@ module RawTendermintNode = struct
     t
     |> set_step_start_time new_clock
     |> fun t -> t
-    |> state
+    |> step_state
     |> StepState.destruct
     ~proposal:(propose_timeout t)
     ~prevote:(prevote_timeout t)
@@ -341,8 +353,10 @@ module RawTendermintNode = struct
       assert (List.length cs >= commitment_threshold)
     ) ;
 
+    (* TODO: Check Operation Gas/Size limit from Block *)
+
     t
-    |> state
+    |> step_state
     |> StepState.get_proposal_opt |> XOption.value' noop
     |> ProposalState.destruct
     ~no_proposal:(ProposalState.proposed bp)
@@ -351,22 +365,22 @@ module RawTendermintNode = struct
       [Send.gossip @@ Message.block_proposal bp] ,
       t
       |> map_blocks (Blocks.add (bp |> BlockProposal.block))
-      |> set_state @@ StepState.proposal ps
+      |> set_step_state @@ StepState.proposal ps
 
   let process_prevote t pv =
     PseudoEffect.returner @@ fun { return } ->
     let noop x = return @@ noop t x in
-    (* Format.printf "Receiving prevote in state %a@;%!" StepState.pp (t |> state) ; *)
+    (* Format.printf "Receiving prevote in step_state %a@;%!" StepState.pp (t |> step_state) ; *)
 
     let threshold = prevote_threshold in
-    t |> state
+    t |> step_state
     |> StepState.get_prevote_opt |> XOption.value' noop
     (* |> fun x -> Format.printf "adding prevote@;%!" ; x *)
     |> PrevoteState.add ~threshold pv
-    |> StepState.prevote |> fun x -> set_state x t
+    |> StepState.prevote |> fun x -> set_step_state x t
     |> fun t ->
     (* Format.printf "Lock? %b@;%!" (
-      t |> state
+      t |> step_state
       |> StepState.get_prevote_opt |> XOption.value' noop
       |> PrevoteState.threshold |> Option.is_some
     ); *)
@@ -378,10 +392,10 @@ module RawTendermintNode = struct
 
     (* Format.printf "Processing precommitment@;%!" ; *)
     let threshold = precommitment_threshold in
-    t |> state
+    t |> step_state
     |> StepState.get_precommitment_opt |> XOption.value' noop
     |> PrecommitmentState.add ~threshold pc
-    |> StepState.precommitment |> fun x -> set_state x t
+    |> StepState.precommitment |> fun x -> set_step_state x t
     |> fun t -> [Send.gossip @@ Message.precommitment pc] , t
 
   let process_block t bi =
@@ -392,38 +406,32 @@ module RawTendermintNode = struct
     let threshold = commitment_threshold in
     PseudoEffect.returner @@ fun { return } ->
     let default t _ = return ([Send.gossip @@ Message.commitment c] , t) in
-
     (* Format.printf "Processing commitment@;%!" ; *)
-
     let get_committed_block_hash t =
-      t |> commitments |> CommitmentState.committed_block |> XOption.fold'' (default t) Fun.id
+      t
+      |> commitments |> CommitmentState.committed_block
+      |> XOption.fold'' (default t) Fun.id
     in
     let get_block t bh =
-      let default x =
-        (* Format.printf "Missing committed block@;%!" ; *)
-        default t x
-      in
-      t |> blocks |> Blocks.find_opt (t |> height) bh |> XOption.fold'' default Fun.id
-    in
-    t
-    |> map_commitments (CommitmentState.add ~threshold c)
-    |> fun t ->
-    let commitment () =
-      (* Format.printf "Processing commitment in state@;%!" ; *)
-      (* Format.printf "Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
+      let default x = default t x in
       t
-      |> get_committed_block_hash
-      |> fun bh ->
-      (* Format.printf "Got committed block@;%!" ; *)
-      bh
-      |> get_block t
-      |> fun _ ->
-      (* Format.printf "last Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
-      [ Send.gossip @@ Message.commitment c ] ,
-      t |> set_state @@ StepState.postcommitment bh
+      |> blocks |> Blocks.find_opt (t |> height) bh
+      |> XOption.fold'' default Fun.id
     in
+    let t = t |> map_commitments (CommitmentState.add ~threshold c) in
     let default x = default t x in
-    t |> state |> StepState.destruct
+    let commitment () =
+      (* Format.printf "Processing commitment in step_state@;%!" ; *)
+      (* Format.printf "Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
+      let bh = t |> get_committed_block_hash in
+      let b = bh |> get_block t in
+      (* Format.printf "Got committed block@;%!" ; *)
+      (* Format.printf "last Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
+      let t = t |> set_step_state @@ StepState.postcommitment bh in
+      let t = t |> map_chain_state @@ Transition.do_bunch (Block.operations b) in 
+      [ Send.gossip @@ Message.commitment c ] , t
+    in
+    t |> step_state |> StepState.destruct
     ~proposal:default ~prevote:default ~precommitment:default
     ~commitment ~postcommitment:default
 

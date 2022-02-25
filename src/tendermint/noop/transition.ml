@@ -9,24 +9,25 @@ end
 module Bunch = struct
   let max_gas = 100_000_000L
   type t = Operation.t list
+  let dummy = []
+  let encoding : t Encoding.t = Encoding.(list Operation.encoding)
 end
 
 module State = struct
   type t = unit
+  let empty = ()
 end
 
-module Transition = struct
-  type do_operation_result = {
-    state : State.t ;
-    gas : int64 ;
-    bytes : int64 ;
-  }
-  let do_operation
-  : State.t -> Operation.t -> do_operation_result
-  = fun state () ->
-  { state ; gas = 0L ; bytes = 0L }
-  
-  let do_bunch
-  : State.t -> Bunch.t -> State.t
-  = fun state _ -> state
-end
+type do_operation_result = {
+  state : State.t ;
+  gas : int64 ;
+  bytes : int64 ;
+}
+let do_operation
+: Operation.t -> State.t -> do_operation_result
+= fun () state ->
+{ state ; gas = 0L ; bytes = 0L }
+
+let do_bunch
+: Bunch.t -> State.t -> State.t
+= fun _ state -> state

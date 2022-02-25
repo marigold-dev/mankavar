@@ -47,6 +47,8 @@ module Bunch = struct
     in
     assert (Int64.compare gas_sum max_gas <= 0) ;
     lst
+  let dummy = make []
+  let encoding : t Encoding.t = Encoding.(list Operation.encoding)
 end
 
 module Contract = struct
@@ -65,58 +67,58 @@ module State = struct
     mutable slow_memory : Value.t AVMap.t ;
   }
   [@@deriving ez]
+
+  let empty = make_tpl AMap.empty AMap.empty AVMap.empty
 end
 
-module Transition = struct
-  (* Take care of gas and bytes *)
-  type do_operation_result = {
-    state : State.t ;
-    gas : int64 ;
-    bytes : int64 ;
-  }
-  [@@deriving ez]
+(* Take care of gas and bytes *)
+type do_operation_result = {
+  state : State.t ;
+  gas : int64 ;
+  bytes : int64 ;
+}
+[@@deriving ez]
 
-  let do_operation state op : do_operation_result =
-    PseudoEffect.returner @@ fun { return } ->
-    let noop () = return @@ do_operation_result_make_tpl state 0L 0L in
-    let src = op |> Operation.source in
-    let dst = op |> Operation.destination in
-    let amount = op |> Operation.amount in
-    let update_ledger l =
-      let src_balance = XOption.value' noop @@ AMap.find_opt src l in
-      let dst_balance = Option.value ~default:0L @@ AMap.find_opt dst l in
-      if XInt64.(src_balance < amount) then noop () ;
-      let src_balance' = Int64.sub src_balance amount in
-      let dst_balance' = Int64.add dst_balance amount in
-      l
-      |> AMap.add src src_balance'
-      |> AMap.add dst dst_balance'
+let do_operation op state : do_operation_result =
+  PseudoEffect.returner @@ fun { return } ->
+  let noop () = return @@ do_operation_result_make_tpl state 0L 0L in
+  let src = op |> Operation.source in
+  let dst = op |> Operation.destination in
+  let amount = op |> Operation.amount in
+  let update_ledger l =
+    let src_balance = XOption.value' noop @@ AMap.find_opt src l in
+    let dst_balance = Option.value ~default:0L @@ AMap.find_opt dst l in
+    if XInt64.(src_balance < amount) then noop () ;
+    let src_balance' = Int64.sub src_balance amount in
+    let dst_balance' = Int64.add dst_balance amount in
+    l
+    |> AMap.add src src_balance'
+    |> AMap.add dst dst_balance'
+  in
+  state.ledger <- update_ledger state.State.ledger ;
+  match AMap.find_opt dst (state.State.contracts) with
+  | Some c -> (
+    let module Run = Scre.Make(struct
+      let read_slow k =
+        AVMap.find (dst , k) state.slow_memory
+      let write_slow k v =
+        state.slow_memory <- AVMap.add (dst , k) v state.slow_memory
+    end) in
+    let input = op.payload in
+    let storage = Contract.storage c in
+    let (storage' : Contract.storage) =
+      Run.eval (Contract.program c) ~input ~storage
     in
-    state.ledger <- update_ledger state.State.ledger ;
-    match AMap.find_opt dst (state.State.contracts) with
-    | Some c -> (
-      let module Run = Scre.Make(struct
-        let read_slow k =
-          AVMap.find (dst , k) state.slow_memory
-        let write_slow k v =
-          state.slow_memory <- AVMap.add (dst , k) v state.slow_memory
-      end) in
-      let input = op.payload in
-      let storage = Contract.storage c in
-      let (storage' : Contract.storage) =
-        Run.eval (Contract.program c) ~input ~storage
-      in
-      let c = c |> Contract.set_storage storage' in
-      state.contracts <- AMap.add dst c state.contracts ;
-      do_operation_result_make_tpl state 0L 0L
-    )
-    | None ->
-      assert (Array.length op.payload = 0) ;
-      do_operation_result_make_tpl state 0L 0L
+    let c = c |> Contract.set_storage storage' in
+    state.contracts <- AMap.add dst c state.contracts ;
+    do_operation_result_make_tpl state 0L 0L
+  )
+  | None ->
+    assert (Array.length op.payload = 0) ;
+    do_operation_result_make_tpl state 0L 0L
 
-  let do_bunch state (bunch : Bunch.t) =
-    let aux state op =
-      (do_operation state op).state
-    in
-    List.fold_left aux state bunch
-end
+let do_bunch (bunch : Bunch.t) state =
+  let aux state op =
+    (do_operation op state).state
+  in
+  List.fold_left aux state bunch
