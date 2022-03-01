@@ -185,6 +185,13 @@ module StepState = struct
   | Postcommitment of PostcommitmentState.t
   [@@deriving ez]
 
+  let kind = destruct_tpl
+    (fun _ -> 0)
+    (fun _ -> 1)
+    (fun _ -> 2)
+    (fun _ -> 3)
+    (fun _ -> 4)
+  let compare_kind : t -> t -> int = fun a b -> compare (kind a) (kind b)
   let pp ppf = destruct_tpl
     (fun _ -> Format.fprintf ppf "proposal")
     (fun _ -> Format.fprintf ppf "prevote")

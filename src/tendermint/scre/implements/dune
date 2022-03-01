@@ -1,5 +1,5 @@
 (library
- (name das_tendermint_sc)
+ (name das_tendermint_scre)
  (implements das_tendermint)
  (libraries
   das_tendermint_sc_raw

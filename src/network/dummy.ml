@@ -41,7 +41,7 @@ type t = {
 let empty clock nodes =
   make ~clock ~nodes ~messages:(TCQ.empty clock)
 
-let run_for : Ptime.span -> t -> t = fun d t ->
+let run_for ?hook : Ptime.span -> t -> t = fun d t ->
   let ns = ref @@ nodes t in
   let cl = ref @@ clock t in
   let msgs = ref @@ messages t in
@@ -64,6 +64,17 @@ let run_for : Ptime.span -> t -> t = fun d t ->
       node'
     })) !ns in
     ns := ns' ;
+    (
+      let todos =
+        match hook with
+        | None -> []
+        | Some hook -> hook !cl !ns
+      in
+      todos |> List.iter (fun todo ->
+        msgs := TCQ.add_task !cl todo !msgs ;
+      ) ;
+      ()
+    ) ;
     (* Format.printf "Tasks after sync: %d (%d)@;%!"
       (List.length !todos)
       (TCQ.size !msgs) ; *)
@@ -75,7 +86,7 @@ let run_for : Ptime.span -> t -> t = fun d t ->
     msgs := msgs' ;
     while !todos <> [] do
       let (next , todos') = List.(hd !todos , tl !todos) in
-      Format.printf "Dealing with: %a@;%!" P.Message.pp next ;
+      (* Format.printf "Dealing with: %a@;%!" P.Message.pp next ; *)
       todos := todos' ;
       let ns' = List.map (Node.Packed.map ({ mapper = fun (type a) (m_node : (message , a) Node.Packed.node) node ->
         let module Node' = (val m_node) in

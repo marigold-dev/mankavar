@@ -19,6 +19,7 @@ let commitment_threshold = nb_endorsers - max_byzantine
 
 open Structs
 
+module Transition = Transition
 module Message = Message
 module Tendermint_state = Tendermint_state
 
@@ -52,7 +53,12 @@ module RawTendermintNode = struct
     t |> account |> Addr.public_key |> Addr.pp_public_key ppf
 
   let set_step_state s t =
-    t |> set_step_start_time (t |> clock) |> set_step_state s
+    let t =
+      if StepState.compare_kind s (step_state t) <> 0
+      then t |> set_step_start_time (t |> clock)
+      else t
+    in
+    set_step_state s t
 
   let sign t hash =
     Sig.sign_hash ~hash ~secret_key:(t |> account |> Addr.secret_key) 
@@ -87,7 +93,8 @@ module RawTendermintNode = struct
     `get_proposer` should fail when the node can't know the proposer
     of given height and round
   *)
-  let get_proposer : endorsers -> height -> Round.Index.t -> t -> Account.Address.public_key
+  let get_proposer
+  : endorsers -> height -> Round.Index.t -> t -> Account.Address.public_key
   = fun lst h r _ ->
     let l = List.length lst in
     let h' =
@@ -103,7 +110,8 @@ module RawTendermintNode = struct
   let get_current_proposer : t -> Account.Address.public_key = fun t ->
     get_proposer (t|>endorsers) (t|>height) (t|>round) t
 
-  let do_prevote_current : t -> Prevote.content -> Message.t = fun t content ->
+  let do_prevote_current
+  : t -> Prevote.content -> Message.t = fun t content ->
     let height = t |> height in
     let round = t |> round in
     let unsigned = Prevote.unsigned_make ~content ~height ~round in
@@ -113,7 +121,8 @@ module RawTendermintNode = struct
     |> ConsensusMessage.prevote |> Message.consensus
   
   let do_precommit : t -> Precommitment.block_hash -> Message.t = fun t bh ->
-    let unsigned = Precommitment.unsigned_make ~block_hash:bh ~height:(t |> height) in
+    let unsigned
+    = Precommitment.unsigned_make ~block_hash:bh ~height:(t |> height) in
     let hash = unsigned |> Precommitment.unsigned_to_bytes |> do_hash in
     hash |> sign t
     |> Sig.get |> Precommitment.make_tpl unsigned
@@ -152,9 +161,8 @@ module RawTendermintNode = struct
 
   let noop (t : t) _ = [] , t
 
-  let dummy_step_state_hash = Hash'.dummy
 
-  let dummy_block_proposal : t -> BlockProposal.t = fun t ->
+  let build_block : t -> Block.t * t = fun t ->
     let height = t |> height in
     let block =
       let prev_height = Height.predecessor height in
@@ -169,9 +177,18 @@ module RawTendermintNode = struct
         let state_hash = Transition.State.do_hash (t |> chain_state) in
         let time = t |> clock in
         let network_name = t |> network in
-        Block.Header.make ~height ~time ~previous_hash ~network_name ~state_hash
+        Block.Header.make
+          ~height ~time ~previous_hash ~network_name ~state_hash
       in
-      let operations = Transition.Bunch.dummy in
+      let operations , t =
+        let ops , mempool =
+          let gas_limit = Transition.Bunch.max_gas in
+          Mempool.get ~gas_limit (mempool t)
+        in
+        let bunch = Transition.Bunch.make ops in
+        let t = set_mempool mempool t in
+        bunch , t
+      in
       let previous_commitments =
         let prevs =
           if Height.(equal height zero) then
@@ -191,40 +208,49 @@ module RawTendermintNode = struct
       in
       Block.make ~header ~operations ~previous_commitments
     in
-    let unsigned =
-      let round = t |> round in
-      BlockProposal.Unsigned.make ~height ~round ~block
+    block , t
+
+
+  let propose_start_proposer t =
+
+    let block_proposal , t =
+      t |> lock |> Option.fold
+      ~none:(
+        let b , t = build_block t in
+        let bp = propose_block b t in
+        bp , t
+      )
+      ~some:(fun l ->
+        l |> Lock.content |> Prevote.content |> Prevote.content_destruct
+        ~nil:(fun () ->
+          let b , t = build_block t in
+          let bp = propose_block b t in
+          bp , t
+        )
+        ~block:(fun bh ->
+          let b = Blocks.find (l |> Lock.height) bh (t |> blocks) in
+          let bp = propose_block b t in
+          bp , t
+        )
+      )
     in
-    let hash = unsigned |> BlockProposal.Unsigned.to_bytes |> do_hash in
-    let signed = sign t hash in
-    let proposer_signature = signed |> Sig.get in
-    BlockProposal.make ~unsigned ~proposer_signature
+    [Send.broadcast @@ Message.consensus @@
+      ConsensusMessage.block_proposal block_proposal] ,
+    t |> set_step_state
+      (StepState.proposal @@ ProposalState.proposed block_proposal)
+
+  let propose_start_follower t =
+    let t =
+      t |> set_step_state
+      (StepState.proposal ProposalState.no_proposal)
+    in
+    [] , t
 
   let propose_start t =
     if Addr.public_key_equal
       (get_current_proposer t) (t |> account |> Addr.public_key)
-    then (
-      let block_proposal =
-        t |> lock |> Option.fold
-        ~none:(dummy_block_proposal t)
-        ~some:(fun l ->
-          l |> Lock.content |> Prevote.content |> Prevote.content_destruct
-          ~nil:(fun () -> dummy_block_proposal t)
-          ~block:(fun bh ->
-            let block = Blocks.find (l |> Lock.height) bh (t |> blocks) in
-            propose_block block t
-          )
-        )
-      in
-      [Send.broadcast @@ Message.consensus @@
-        ConsensusMessage.block_proposal block_proposal] ,
-      t |> set_step_state
-        (StepState.proposal @@ ProposalState.proposed block_proposal)
-    ) else (
-      [] ,
-      t |> set_step_state
-        (StepState.proposal ProposalState.no_proposal)
-    )
+    then propose_start_proposer t
+    else propose_start_follower t
 
   let propose_timeout t s =
     (* Format.printf "Propose timeout@;%!" ; *)
@@ -295,10 +321,9 @@ module RawTendermintNode = struct
     |> propose_start
 
   let postcommitment_timeout t _pc =
-  t
-  |> map_height Height.increment
-  |> fun t ->
-  [] , t
+    t
+    |> map_height Height.increment
+    |> propose_start
 
   (* TODO: Add round drift for bad network *)
   let step_timeout t =
@@ -314,6 +339,8 @@ module RawTendermintNode = struct
     PseudoEffect.returner @@ fun { return } ->
     let t = set_clock new_clock t in
     let time_since_step = Ptime.diff new_clock (t |> step_start_time) in
+    (* Format.printf "time since step: %a@;%!" Ptime.Span.pp time_since_step ; *)
+    
     (* Format.printf "New clock: %a@;%!" XPtime.pp_ms new_clock ;
     Format.printf "Step Start Time: %a@;%!" XPtime.pp_ms (t |> step_start_time) ;
     Format.printf "Time since step: %a@;%!" Ptime.Span.pp time_since_step ;
@@ -326,7 +353,7 @@ module RawTendermintNode = struct
         )
       )
     in *)
-    if Ptime.Span.(compare time_since_step (t|>step_timeout) <= 0) then
+    if Ptime.Span.(compare time_since_step (t|>step_timeout) < 0) then
       return ([] , t) ;
     t
     |> set_step_start_time new_clock
@@ -344,17 +371,18 @@ module RawTendermintNode = struct
     PseudoEffect.returner @@ fun { return } ->
     let noop x = return @@ noop t x in
     (* Format.printf "Receiving block proposal@;%!" ; *)
-
     (* Check Previous Commitments *) (
       XBool.do_if_true (not @@ Height.equal (t |> height) Height.zero) @@ fun () ->
-      let bh = bp |> BlockProposal.block |> Block.hash in
-      let uc = Commitment.unsigned_make_tpl bh (Height.predecessor @@ height t) in
-      let cs = t |> commitments |> CommitmentState.find_opt uc |> Option.get in
+      let bh = bp |> BlockProposal.block |> Block.header |> Block.Header.previous_hash in
+      let uc
+      = Commitment.unsigned_make_tpl bh (Height.predecessor @@ height t) in
+      (* Format.printf "grep uc : %a@;%!" Commitment.pp_unsigned uc ; *)
+      let cs
+      = t |> commitments |> CommitmentState.find_opt uc |> Option.get in
       assert (List.length cs >= commitment_threshold)
     ) ;
-
+    (* Format.printf "Checked@;%!" ; *)
     (* TODO: Check Operation Gas/Size limit from Block *)
-
     t
     |> step_state
     |> StepState.get_proposal_opt |> XOption.value' noop
@@ -362,6 +390,7 @@ module RawTendermintNode = struct
     ~no_proposal:(ProposalState.proposed bp)
     ~proposed:(ProposalState.proposed)
     |> fun ps ->
+      (* Format.printf "reading proposal@;%!" ; *)
       [Send.gossip @@ Message.block_proposal bp] ,
       t
       |> map_blocks (Blocks.add (bp |> BlockProposal.block))
@@ -402,38 +431,52 @@ module RawTendermintNode = struct
     [Send.gossip @@ Message.block bi] ,
     t |> map_blocks (Blocks.add (bi |> BlockInfo.block))
 
+  let get_committed_block_hash t =
+    t
+    |> commitments |> CommitmentState.committed_block
+  let get_block t bh =
+    t
+    |> blocks |> Blocks.find_opt (t |> height) bh
+
+  let commit_block t =
+    PseudoEffect.fail_default t @@ fun { fail } ->
+    let bh = t |> get_committed_block_hash |> XOption.value' fail in
+    let b = bh |> get_block t |> XOption.value' fail in
+    let h = t |> height in
+    Format.printf "Committing block@;%!" ;
+    (* Format.printf "Got committed block@;%!" ; *)
+    (* Format.printf "last Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
+    let t
+    = t |> set_step_state @@ StepState.postcommitment bh in
+    let t
+    = t |> map_chain_state @@ Transition.do_bunch (Block.operations b) in 
+    let t
+    = t |> map_blocks @@ Blocks.finalize h bh in
+    let t = t |> set_lock None in
+    Format.printf "Committed block@;%!" ;
+    t
+
   let process_commitment t c =
     let threshold = commitment_threshold in
-    PseudoEffect.returner @@ fun { return } ->
-    let default t _ = return ([Send.gossip @@ Message.commitment c] , t) in
-    (* Format.printf "Processing commitment@;%!" ; *)
-    let get_committed_block_hash t =
-      t
-      |> commitments |> CommitmentState.committed_block
-      |> XOption.fold'' (default t) Fun.id
-    in
-    let get_block t bh =
-      let default x = default t x in
-      t
-      |> blocks |> Blocks.find_opt (t |> height) bh
-      |> XOption.fold'' default Fun.id
-    in
+    (* Format.printf "Processing commitment in state %a@;%!"
+      StepState.pp (step_state t) ; *)
     let t = t |> map_commitments (CommitmentState.add ~threshold c) in
-    let default x = default t x in
-    let commitment () =
-      (* Format.printf "Processing commitment in step_state@;%!" ; *)
-      (* Format.printf "Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
-      let bh = t |> get_committed_block_hash in
-      let b = bh |> get_block t in
-      (* Format.printf "Got committed block@;%!" ; *)
-      (* Format.printf "last Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
-      let t = t |> set_step_state @@ StepState.postcommitment bh in
-      let t = t |> map_chain_state @@ Transition.do_bunch (Block.operations b) in 
-      [ Send.gossip @@ Message.commitment c ] , t
+    let t = match StepState.get_commitment_opt @@ step_state t with
+    | None -> t
+    | Some () -> (
+      if t |> commitments |> CommitmentState.committed_block |> Option.is_some
+      then commit_block t
+      else t
+    )
     in
-    t |> step_state |> StepState.destruct
-    ~proposal:default ~prevote:default ~precommitment:default
-    ~commitment ~postcommitment:default
+    (* Format.printf "Commitment processed@;%!" ; *)
+    [Send.gossip @@ Message.commitment c] , t
+
+  let is_height_committed h = fun t ->
+    Height.(h > height t) || (
+      Height.(h = height t) &&
+      (StepState.is_postcommitment @@ step_state t)
+    )
 
   let get_height : consensus_message -> t -> Height.t = fun m _ ->
     m |> ConsensusMessage.destruct 
@@ -550,3 +593,24 @@ module RawDeadNode = struct
 end
 
 module DeadNodeWitness : Node.TYPE = RawDeadNode
+
+module RawHookNode = struct
+  type t = {
+    mutable synchronize_hook : Ptime.t -> Message.t list ;
+    mutable message_hook : Message.t -> Message.t list ;
+  }
+  [@@deriving ez]
+  type message = Message.t
+  let make = make_tpl
+  let empty () = make (fun _ -> []) (fun _ -> [])
+  let synchronize time t = (
+    List.map Send.broadcast @@ t.synchronize_hook time ,
+    t
+  )
+  let process_message msg t = (
+    List.map Send.broadcast @@ t.message_hook msg ,
+    t
+  )
+end
+
+module HookNodeWitness : Node.TYPE = RawHookNode

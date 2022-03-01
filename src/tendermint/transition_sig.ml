@@ -20,6 +20,7 @@ module Bunch : sig
 
   type t
   val dummy : t
+  val make : Operation.t list -> t
   val encoding : t Encoding.t
 end
 

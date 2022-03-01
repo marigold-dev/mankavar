@@ -19,6 +19,11 @@ let fail_opt f =
   let fail () = return None in
   Option.some @@ f { fail }
 
+let fail_default x f =
+  returner @@ fun { return } ->
+  let fail () = return x in
+  f { fail }
+
 let failer f =  
   returner @@ fun { return } ->
   let fail x = return @@ Result.error x in

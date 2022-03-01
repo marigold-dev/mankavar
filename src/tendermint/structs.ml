@@ -161,7 +161,14 @@ module Blocks = struct
   let keep_height = 10l
 
   let empty : t = HMap.empty
-
+  let finalize h bh (t : t) =
+    let f opt = match opt with
+    | None -> assert false
+    | Some hc ->
+      Option.some @@
+      Height_content.set_finalized_hash (Some bh) hc
+    in
+    HMap.update h f t
   let find_opt : Height.t -> Hash'.t -> t -> Block.t option = fun h bh t ->
     t
     |> HMap.find_opt h

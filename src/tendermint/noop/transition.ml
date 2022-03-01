@@ -12,6 +12,7 @@ module Bunch = struct
   let max_gas = 100_000_000L
   type t = Operation.t list
   let dummy = []
+  let make lst = lst
   let encoding : t Encoding.t = Encoding.(list Operation.encoding)
 end
 

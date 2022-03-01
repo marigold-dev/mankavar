@@ -217,10 +217,12 @@ let do_origination op state : do_operation_result =
   ignore op ; ignore state ; assert false
 
 let do_operation op =
+  Format.printf "DO OPERATION@;\n" ;
   Operation.destruct op ~transfer:do_transfer ~origination:do_origination
 
 let do_bunch (bunch : Bunch.t) state =
   let aux state op =
     (do_operation op state).state
   in
+  Format.printf "DO BUNCH %d@;\n" @@ List.length bunch ;
   List.fold_left aux state bunch

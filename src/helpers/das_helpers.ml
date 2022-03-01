@@ -219,6 +219,12 @@ module Index = struct
     module Map = XMap.Make(struct type nonrec t = t let compare = compare end)
     let pp ppf x = Format.fprintf ppf "%ld" (x |> get_height_exn)
     let encoding = Encoding.(conv of_int32 to_int32 int32)
+    let (<) a b = compare a b < 0
+    let (<=) a b = compare a b <= 0
+    let (>) a b = compare a b > 0
+    let (>=) a b = compare a b >= 0
+    let (<>) a b = compare a b <> 0
+    let (=) a b = compare a b = 0
   end
 
   module Make() : sig
@@ -233,7 +239,15 @@ module Index = struct
     val predecessor : t -> t
     val pp : Format.formatter -> t -> unit
     val encoding : t Encoding.t
-    module Map : module type of XMap.Make(struct type nonrec t = t let compare = compare end)
+    module Map : module type of XMap.Make(
+      struct type nonrec t = t let compare = compare end
+    )
+    val (<) : t -> t -> bool
+    val (<=) : t -> t -> bool
+    val (>) : t -> t -> bool
+    val (>=) : t -> t -> bool
+    val (<>) : t -> t -> bool
+    val (=) : t -> t -> bool
   end = struct include Raw end
 end
 

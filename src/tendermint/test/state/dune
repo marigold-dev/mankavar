@@ -1,8 +1,8 @@
 (test
- (name das_tendermint_sc_test)
+ (name tendermint_test)
  (libraries
+  ; local
   das_tendermint_scre
-
+  ; global
   alcotest
- ) 
-)
+ ))
