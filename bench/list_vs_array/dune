@@ -1,0 +1,12 @@
+(executable
+ (name list_vs_array)
+ (libraries
+  mtime
+  mtime.clock.os
+ )
+)
+
+(rule
+ (alias bench)
+ (action (run ./list_vs_array.exe))
+)

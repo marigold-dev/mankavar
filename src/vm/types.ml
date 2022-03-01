@@ -1,3 +1,4 @@
+open Das_helpers
 open Vm_helpers
 
 type value = Value.t
@@ -5,18 +6,32 @@ module VMap = Value.Map
 type stack = Stack.t
 
 type register = A | B | C | D
+[@@deriving ez]
 let register_pp ppf x =
   Format.fprintf ppf "r%s" @@ match x with
   | A -> "a"
   | B -> "b"
   | C -> "c"
   | D -> "d"
+let register_encoding = Encoding.(
+  union [
+    case get_a_opt (fun () -> a) unit ;
+    case get_b_opt (fun () -> b) unit ;
+    case get_c_opt (fun () -> c) unit ;
+    case get_d_opt (fun () -> d) unit ;
+  ]
+)
 
 type op1 = Not
 [@@deriving ez]
 let op1_pp ppf x =
   let print x = Format.fprintf ppf "%s" x in
   print @@ op1_destruct_tpl ("Not") x
+let op1_encoding = Encoding.(
+  union [
+    case get_not_opt not' unit ;
+  ]
+)
 
 type op2 =
 | Add
@@ -34,6 +49,16 @@ let op2_pp ppf x =
     "+" "-" "*" "/"
     "&&" "||"
   x
+let op2_encoding = Encoding.(
+  union [
+    case get_add_opt add' unit ;
+    case get_sub_opt sub' unit ;
+    case get_mul_opt mul' unit ;
+    case get_div_opt div' unit ;
+    case get_and__opt and_' unit ;
+    case get_or__opt or_' unit ;
+  ]
+)
 (*
   Instructions extended with a case for compile time stuff
 *)
@@ -85,9 +110,31 @@ type empty = |
   Runtime instructions don't have compile_time case
 *)
 type rt_instruction = empty instruction
+
 let rt_instruction_pp : _ -> rt_instruction -> _ =
   let compile_time : empty -> _ = function _ -> . in
   instruction_pp ~compile_time
+
+let rt_instruction_encoding : rt_instruction Encoding.t = Encoding.(
+  let renc = register_encoding in
+  let op1enc = op1_encoding in
+  let op2enc = op2_encoding in
+  union [
+    case get_jump_value_opt jump_value int64 ;
+    case get_jump_opt jump renc ;
+    case get_jumpgez_opt jumpgez' @@ tuple_2 renc renc ;
+    case get_stack_push_opt stack_push renc ;
+    case get_stack_get_opt stack_get' @@ tuple_2 int renc ;
+    case get_stack_set_opt stack_set' @@ tuple_2 int renc ;
+    case get_stack_drop_opt stack_drop int ;
+    case get_register_set_value_opt register_set_value' @@ tuple_2 renc int64 ;
+    case get_register_set_opt register_set' @@ tuple_2 renc renc ;
+    case get_call_op1_opt call_op1' @@ tuple_3 op1enc renc renc ;
+    case get_call_op2_opt call_op2' @@ tuple_4 op2enc renc renc renc ;
+    case get_custom_opt custom int ;
+    case get_halt_opt halt' unit ;
+  ]
+)
 
 type 'mem state = {
   instructions : rt_instruction array ;

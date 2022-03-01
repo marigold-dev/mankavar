@@ -1,6 +1,8 @@
 (executable
- (name bench_misc)
+ (name fifo)
  (libraries
+  unix
+
   mtime
   mtime.clock.os
  )
@@ -8,5 +10,5 @@
 
 (rule
  (alias bench)
- (action (run ./bench_misc.exe))
+ (action (run ./fifo.exe))
 )

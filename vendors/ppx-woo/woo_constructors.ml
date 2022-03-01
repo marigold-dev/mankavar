@@ -56,10 +56,37 @@ let constructor ?wrap_constructor polymorphic : W.constructor_declaration -> P.s
   let name = label_to_variable label in
   [ declaration ~name ~body ]
 
+let constructor' ?wrap_constructor polymorphic : W.constructor_declaration -> P.structure_item list = fun lts ->
+  let (label , (_index , _params , tys)) = lts in
+  let l = List.length tys in
+  let wrap body =
+    match wrap_constructor with
+    | None -> body
+    | Some wrap_constructor -> e_apply wrap_constructor body
+  in
+  let body =
+    if l = 0 then (
+      wrap @@ e_fun "_" @@ e_constructor ~polymorphic label
+    ) else (
+      let vars = tys |> List.mapi (fun i _ -> "x" ^ (string_of_int i)) in
+      let body = e_tuple @@ List.map e_var vars in
+      e_funs' vars @@ wrap @@ e_constructor ~polymorphic ~body label
+    )
+  in
+  let name = (label_to_variable label) ^ "'" in
+  [ declaration ~name ~body ]
+
 let constructors ?wrap_constructor : W.variant -> P.structure_item list = fun v ->
   let W.{ polymorphic ; constructor_declarations } = v in
   let ltss = SMap.to_kv_list constructor_declarations in
   let itemss = List.map (constructor ?wrap_constructor polymorphic) ltss in
+  let items = List.concat itemss in
+  items
+
+let constructors' ?wrap_constructor : W.variant -> P.structure_item list = fun v ->
+  let W.{ polymorphic ; constructor_declarations } = v in
+  let ltss = SMap.to_kv_list constructor_declarations in
+  let itemss = List.map (constructor' ?wrap_constructor polymorphic) ltss in
   let items = List.concat itemss in
   items
 

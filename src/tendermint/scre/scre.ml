@@ -2,6 +2,10 @@ open Das_vm
 open Eval
 
 type memory = Value.t VMap.t
+let memory_encoding = Das_helpers.Encoding.(
+  conv VMap.of_list VMap.to_list @@ list @@ tuple_2
+    int64 int64
+)
 
 module type RW_SLOW = sig
   val read_slow : int64 -> int64
@@ -10,6 +14,7 @@ end
 module type R_SLOW = sig
   val read_slow : int64 -> int64
 end
+
 module Cache(P : R_SLOW)() = struct
   module Raw = struct
     type cache = (Value.t * bool) VMap.t (* value * to_write *)
@@ -26,7 +31,7 @@ module Cache(P : R_SLOW)() = struct
       cache := VMap.add k (v , true) !cache
   end
   module Rw_slow : RW_SLOW = Raw
-  include Raw
+  let content = Raw.cache  
 end
 
 module Make(P : RW_SLOW) = struct

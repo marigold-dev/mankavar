@@ -3,6 +3,8 @@
  (libraries
   das_helpers
   das_vm
+
+  do_hash
  )
  (preprocess
   (pps

@@ -5,6 +5,7 @@ module Operation = struct
   let get_max_gas () = 1L
   (* let get_height () = Height.zero *)
   let encoding : t Encoding.t = Encoding.unit
+  let pp ppf () = Format.dprintf "<noop operation>" ppf
 end
 
 module Bunch = struct
@@ -17,6 +18,7 @@ end
 module State = struct
   type t = unit
   let empty = ()
+  let do_hash () = Hash.make (Fun.const Hash'.dummy) ()
 end
 
 type do_operation_result = {

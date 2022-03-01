@@ -1,0 +1,8 @@
+(test
+ (name fifo_interop_test)
+ (libraries
+  fifo_interop
+
+  alcotest
+ )
+)

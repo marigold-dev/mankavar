@@ -24,6 +24,31 @@ module XBytes = struct
     Bytes.iter (pp_char ppf) b
 end
 
+module XFormat = struct
+  let array f ppf xs =
+    Format.fprintf ppf "@[<hov 2>{ " ;
+    xs |> Array.iter (fun x ->
+      Format.fprintf ppf "%a" f x
+    ) ;
+    Format.fprintf ppf "}@]" ;
+    ()
+
+  let list f ppf xs =
+    Format.fprintf ppf "@[<hov 2>[ " ;
+    xs |> List.iter (fun x ->
+      Format.fprintf ppf "%a" f x
+    ) ;
+    Format.fprintf ppf "]@]" ;
+    ()
+  
+  let tuple_2 a b ppf (x , y) =
+    Format.fprintf ppf "@[<hov 2>( %a , @; %a )@]" a x b y
+
+  let conv f pp ppf x = pp ppf @@ f x
+
+  let int64 ppf = Format.fprintf ppf "%Ld"
+end
+
 module Hash : sig
   type 'a t
   val make : ('a -> bytes) -> 'a -> 'a t

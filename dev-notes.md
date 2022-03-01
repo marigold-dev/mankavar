@@ -127,12 +127,11 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
   - X Dummy Consensus
   - Tendermint
     - X Basic
+    - X Block validation
+    - X Pipeline Block validation
     - Way more tests
-    - Block validation
-    - Pipeline Block balidation
     - Use Logs
     - Logs all bad Option.get
-  - Something more alien, like Avalanche
 - Node
   - X Dummy Consensus Node
   - X Tendermint Node
@@ -140,9 +139,10 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
   - Other behaviors
     - Faulty Nodes
     - Single Deviation from regular node Node
+    - Bad state hashes
     - Byzantine Nodes
   - More features
-    - Mempool
+    - X Mempool
     - Gossip
 - Network Simulator
   X Dummy Network
@@ -160,11 +160,8 @@ Then, the goal will be to have it used by a Network Interface, so that Nodes can
 - ORU
   - Abstract Rollups
   - Extend Tendermint
-    - Duplicate Tendermint's code?
-    - Functorize Tendermint's code?
-    - Dune Virtual Libraries?
-  - Pre-play k next moves for stronger resistance to censorship
+    - X Dune Virtual Libraries
 - Storage
-  - Everything in memory and simulated for now
+  - X Everything in memory and simulated for now
 - Network
   - Build a network interface

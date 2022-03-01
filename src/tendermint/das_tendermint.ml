@@ -44,6 +44,7 @@ module RawTendermintNode = struct
     step_start_time : Ptime.t ;
     step_state : StepState.t ;
     chain_state : Transition.State.t ;
+    mempool : Mempool.t ;
   }
   [@@deriving ez]
 
@@ -108,20 +109,24 @@ module RawTendermintNode = struct
     let unsigned = Prevote.unsigned_make ~content ~height ~round in
     let hash = unsigned |> Prevote.unsigned_to_bytes |> do_hash in
     hash |> sign t
-    |> Sig.get |> Prevote.make_tpl unsigned |> Message.prevote
+    |> Sig.get |> Prevote.make_tpl unsigned
+    |> ConsensusMessage.prevote |> Message.consensus
   
   let do_precommit : t -> Precommitment.block_hash -> Message.t = fun t bh ->
     let unsigned = Precommitment.unsigned_make ~block_hash:bh ~height:(t |> height) in
     let hash = unsigned |> Precommitment.unsigned_to_bytes |> do_hash in
     hash |> sign t
-    |> Sig.get |> Precommitment.make_tpl unsigned |> Message.precommitment
+    |> Sig.get |> Precommitment.make_tpl unsigned
+    |> ConsensusMessage.precommitment |> Message.consensus
 
   let do_commit : t -> Commitment.unsigned -> Message.t = fun t unsigned ->
     let hash = unsigned |> Commitment.unsigned_to_bytes |> do_hash in
     hash |> sign t
-    |> Sig.get |> Commitment.make_tpl unsigned |> Message.commitment
+    |> Sig.get |> Commitment.make_tpl unsigned
+    |> ConsensusMessage.commitment |> Message.consensus
 
   type message = Message.t
+  type consensus_message = ConsensusMessage.t
 
   let empty ~network clock endorsers account : t =
     let height = Height.zero in
@@ -132,10 +137,11 @@ module RawTendermintNode = struct
     let round = Round.Index.zero in
     let blocks = Blocks.empty in
     let chain_state = Transition.State.empty in
+    let mempool = Mempool.empty in
     make
       ~account ~clock ~endorsers ~height ~step_state
       ~commitments ~blocks ~lock ~round ~step_start_time
-      ~network ~chain_state
+      ~network ~chain_state ~mempool
 
   (*
     This should increase as round increases to allow for bad networks. Adaptative.
@@ -159,10 +165,11 @@ module RawTendermintNode = struct
           t |> blocks |> Blocks.find_final prev_height |> Option.get
       in
       let header =
-        (* let step_state_hash = dummy_step_state_hash in *)
+        let previous_hash = prev_hash in
+        let state_hash = Transition.State.do_hash (t |> chain_state) in
         let time = t |> clock in
         let network_name = t |> network in
-        Block.Header.make ~height ~time ~previous_hash:prev_hash ~network_name
+        Block.Header.make ~height ~time ~previous_hash ~network_name ~state_hash
       in
       let operations = Transition.Bunch.dummy in
       let previous_commitments =
@@ -170,8 +177,14 @@ module RawTendermintNode = struct
           if Height.(equal height zero) then
             []
           else (
-            let c = Commitment.unsigned_make ~block_hash:prev_hash ~height:prev_height in
-            t |> commitments |> CommitmentState.commits |> Commitments.find_opt c |> Option.get
+            let c =
+              let block_hash = prev_hash in
+              let height = prev_height in
+              Commitment.unsigned_make ~block_hash ~height
+            in
+            t
+            |> commitments |> CommitmentState.commits
+            |> Commitments.find_opt c |> Option.get
           )
         in
         Block.Previous_commitments.make_tpl prevs
@@ -203,7 +216,8 @@ module RawTendermintNode = struct
           )
         )
       in
-      [Send.broadcast @@ Message.block_proposal block_proposal] ,
+      [Send.broadcast @@ Message.consensus @@
+        ConsensusMessage.block_proposal block_proposal] ,
       t |> set_step_state
         (StepState.proposal @@ ProposalState.proposed block_proposal)
     ) else (
@@ -421,8 +435,8 @@ module RawTendermintNode = struct
     ~proposal:default ~prevote:default ~precommitment:default
     ~commitment ~postcommitment:default
 
-  let get_height : message -> t -> Height.t = fun m _ ->
-    m |> Message.destruct 
+  let get_height : consensus_message -> t -> Height.t = fun m _ ->
+    m |> ConsensusMessage.destruct 
     ~block_proposal:BlockProposal.(fun x -> x |> height)
     ~prevote:Prevote.(fun x -> x |> unsigned |> height)
     ~precommitment:Precommitment.(fun x -> x |> unsigned |> height)
@@ -430,7 +444,7 @@ module RawTendermintNode = struct
     ~block:BlockInfo.(fun x -> x |> block |> Block.height)
 
   (* Checks the signature from a message, and that it comes from an endorser *)
-  let has_signature_from_endorser : message -> t -> bool = fun m t ->
+  let has_signature_from_endorser : consensus_message -> t -> bool = fun m t ->
     PseudoEffect.returner @@ fun { return } ->
     let nope () = return false in
 
@@ -439,7 +453,7 @@ module RawTendermintNode = struct
       then nope ()
     in
 
-    m |> Message.destruct 
+    m |> ConsensusMessage.destruct 
     ~block_proposal:BlockProposal.(fun x ->
       let signature = x |> proposer_signature in
       let hash = x |> to_unsigned_hash in
@@ -492,7 +506,7 @@ module RawTendermintNode = struct
     )
 
 
-  let process_message m t =
+  let process_consensus_message m t =
     PseudoEffect.returner @@ fun { return } ->
     let noop x = return @@ noop t x in
 
@@ -507,12 +521,21 @@ module RawTendermintNode = struct
       if not @@ has_signature_from_endorser m t
       then noop () ;
     ) ;
-    m |> Message.destruct
+    m |> ConsensusMessage.destruct
     ~block_proposal:(process_block_proposal t)
     ~prevote:(process_prevote t)
     ~precommitment:(process_precommitment t)
     ~commitment:(process_commitment t)
     ~block:(process_block t)
+
+  let process_message m t =
+    match m with
+    | Message.Consensus cm -> process_consensus_message cm t
+    | Operation om -> (
+      [Gossip m] ,
+      t |> map_mempool (Mempool.add om)
+    )
+
 end
 
 module TendermintNodeWitness : Node.TYPE = RawTendermintNode

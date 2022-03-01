@@ -1,5 +1,5 @@
 {
-  "checksum": "a3b0ce794c9a2c027d37939d44a8fd52",
+  "checksum": "0950905410061226fadd529a7104af9d",
   "root": "das@link-dev:./package.json",
   "node": {
     "yarn-pkg-config@github:esy-ocaml/yarn-pkg-config#db3a0b63883606dd57c54a7158d560d6cba8cd79@d41d8cd9": {
@@ -32,6 +32,66 @@
       "dependencies": [],
       "devDependencies": []
     },
+    "esy-libsodium@1.0.18002@d41d8cd9": {
+      "id": "esy-libsodium@1.0.18002@d41d8cd9",
+      "name": "esy-libsodium",
+      "version": "1.0.18002",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://registry.npmjs.org/esy-libsodium/-/esy-libsodium-1.0.18002.tgz#sha1:8c82530dc087f172c82af7d12eecfe05e1847600"
+        ]
+      },
+      "overrides": [],
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "esy-libffi@3.3.1@d41d8cd9": {
+      "id": "esy-libffi@3.3.1@d41d8cd9",
+      "name": "esy-libffi",
+      "version": "3.3.1",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://registry.npmjs.org/esy-libffi/-/esy-libffi-3.3.1.tgz#sha1:96945e52a2984e3f97d6fc28c1a378041bdae28d"
+        ]
+      },
+      "overrides": [],
+      "dependencies": [
+        "@opam/conf-texinfo@github:esy-packages/esy-texinfo:package.json#4a05feafbbcc4c57d5d25899fbdab98961b9a69c@d41d8cd9"
+      ],
+      "devDependencies": []
+    },
+    "esy-help2man@github:esy-packages/esy-help2man#c8e6931d1dcf58a81bd801145a777fd3b115c443@d41d8cd9": {
+      "id":
+        "esy-help2man@github:esy-packages/esy-help2man#c8e6931d1dcf58a81bd801145a777fd3b115c443@d41d8cd9",
+      "name": "esy-help2man",
+      "version":
+        "github:esy-packages/esy-help2man#c8e6931d1dcf58a81bd801145a777fd3b115c443",
+      "source": {
+        "type": "install",
+        "source": [
+          "github:esy-packages/esy-help2man#c8e6931d1dcf58a81bd801145a777fd3b115c443"
+        ]
+      },
+      "overrides": [],
+      "dependencies": [],
+      "devDependencies": []
+    },
+    "esy-autoconf@github:esy-packages/esy-autoconf#fb93edf@d41d8cd9": {
+      "id": "esy-autoconf@github:esy-packages/esy-autoconf#fb93edf@d41d8cd9",
+      "name": "esy-autoconf",
+      "version": "github:esy-packages/esy-autoconf#fb93edf",
+      "source": {
+        "type": "install",
+        "source": [ "github:esy-packages/esy-autoconf#fb93edf" ]
+      },
+      "overrides": [],
+      "dependencies": [
+        "esy-help2man@github:esy-packages/esy-help2man#c8e6931d1dcf58a81bd801145a777fd3b115c443@d41d8cd9"
+      ],
+      "devDependencies": []
+    },
     "das@link-dev:./package.json": {
       "id": "das@link-dev:./package.json",
       "name": "das",
@@ -43,10 +103,12 @@
       },
       "overrides": [],
       "dependencies": [
-        "ocaml@4.13.1000@d41d8cd9", "@opam/ptime@opam:0.8.6@5df936b0",
+        "ocaml@4.13.1000@d41d8cd9", "@opam/sodium@opam:0.2.1@820b26c4",
+        "@opam/ptime@opam:0.8.6@5df936b0",
         "@opam/ppxlib@opam:0.23.0@b29cda02",
         "@opam/ppx_protocol_conv_json@opam:5.2.0@1d1cd9e9",
         "@opam/ppx_deriving@opam:5.2.1@089e5dd3",
+        "@opam/parany@opam:12.1.2@72f32920",
         "@opam/mtime@opam:1.4.0@4aed6db9",
         "@opam/msgpack@opam:1.3.0@b2c60fd2",
         "@opam/dune@opam:2.9.3@f57a6d69",
@@ -250,6 +312,47 @@
       ],
       "devDependencies": [
         "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69"
+      ]
+    },
+    "@opam/sodium@opam:0.2.1@820b26c4": {
+      "id": "@opam/sodium@opam:0.2.1@820b26c4",
+      "name": "@opam/sodium",
+      "version": "opam:0.2.1",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/md5/a1/a197001f4c3ebe8c6a43eec4a4957c1e#md5:a197001f4c3ebe8c6a43eec4a4957c1e",
+          "archive:https://github.com/dsheets/ocaml-sodium/archive/0.2.1.tar.gz#md5:a197001f4c3ebe8c6a43eec4a4957c1e"
+        ],
+        "opam": {
+          "name": "sodium",
+          "version": "0.2.1",
+          "path": "esy.lock/opam/sodium.0.2.1"
+        }
+      },
+      "overrides": [
+        {
+          "opamoverride":
+            "esy.lock/overrides/opam__s__sodium_opam__c__0.2.1_opam_override"
+        }
+      ],
+      "dependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/ocamlfind@opam:1.9.3@781b30f3",
+        "@opam/ocamlbuild@opam:0.14.1@ead10f40",
+        "@opam/ctypes-foreign@opam:0.18.0@d7de6eb2",
+        "@opam/ctypes@opam:0.20.0@4e68beca",
+        "@opam/conf-libsodium@opam:1@d2bba2e2",
+        "@opam/base-bytes@opam:base@19d0c2ff",
+        "@opam/base-bigarray@opam:base@b03491b0",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/ocamlfind@opam:1.9.3@781b30f3",
+        "@opam/ctypes-foreign@opam:0.18.0@d7de6eb2",
+        "@opam/ctypes@opam:0.20.0@4e68beca",
+        "@opam/conf-libsodium@opam:1@d2bba2e2",
+        "@opam/base-bytes@opam:base@19d0c2ff",
+        "@opam/base-bigarray@opam:base@b03491b0"
       ]
     },
     "@opam/sexplib0@opam:v0.14.0@155c136c": {
@@ -933,6 +1036,34 @@
         "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69"
       ]
     },
+    "@opam/parany@opam:12.1.2@72f32920": {
+      "id": "@opam/parany@opam:12.1.2@72f32920",
+      "name": "@opam/parany",
+      "version": "opam:12.1.2",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/md5/49/49b8960c178f1e84d7324f3ac79fddf7#md5:49b8960c178f1e84d7324f3ac79fddf7",
+          "archive:https://github.com/UnixJunkie/parany/archive/v12.1.2.tar.gz#md5:49b8960c178f1e84d7324f3ac79fddf7"
+        ],
+        "opam": {
+          "name": "parany",
+          "version": "12.1.2",
+          "path": "esy.lock/opam/parany.12.1.2"
+        }
+      },
+      "overrides": [],
+      "dependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69",
+        "@opam/cpu@opam:2.0.0@595d6879",
+        "@opam/base-unix@opam:base@87d0b2eb",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69",
+        "@opam/cpu@opam:2.0.0@595d6879", "@opam/base-unix@opam:base@87d0b2eb"
+      ]
+    },
     "@opam/octavius@opam:1.2.2@2205cc65": {
       "id": "@opam/octavius@opam:1.2.2@2205cc65",
       "name": "@opam/octavius",
@@ -1265,6 +1396,32 @@
         "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69"
       ]
     },
+    "@opam/integers@opam:0.6.0@0cc267a8": {
+      "id": "@opam/integers@opam:0.6.0@0cc267a8",
+      "name": "@opam/integers",
+      "version": "opam:0.6.0",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/md5/a1/a1e2412f4a0d88757d1a4297f18b374e#md5:a1e2412f4a0d88757d1a4297f18b374e",
+          "archive:https://github.com/ocamllabs/ocaml-integers/archive/0.6.0.tar.gz#md5:a1e2412f4a0d88757d1a4297f18b374e"
+        ],
+        "opam": {
+          "name": "integers",
+          "version": "0.6.0",
+          "path": "esy.lock/opam/integers.0.6.0"
+        }
+      },
+      "overrides": [],
+      "dependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/stdlib-shims@opam:0.3.0@72c7bc98",
+        "@opam/dune@opam:2.9.3@f57a6d69", "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/stdlib-shims@opam:0.3.0@72c7bc98",
+        "@opam/dune@opam:2.9.3@f57a6d69"
+      ]
+    },
     "@opam/fmt@opam:0.9.0@87213963": {
       "id": "@opam/fmt@opam:0.9.0@87213963",
       "name": "@opam/fmt",
@@ -1452,6 +1609,66 @@
         "@opam/base-bytes@opam:base@19d0c2ff"
       ]
     },
+    "@opam/ctypes-foreign@opam:0.18.0@d7de6eb2": {
+      "id": "@opam/ctypes-foreign@opam:0.18.0@d7de6eb2",
+      "name": "@opam/ctypes-foreign",
+      "version": "opam:0.18.0",
+      "source": {
+        "type": "install",
+        "source": [ "no-source:" ],
+        "opam": {
+          "name": "ctypes-foreign",
+          "version": "0.18.0",
+          "path": "esy.lock/opam/ctypes-foreign.0.18.0"
+        }
+      },
+      "overrides": [
+        {
+          "opamoverride":
+            "esy.lock/overrides/opam__s__ctypes_foreign_opam__c__0.18.0_opam_override"
+        }
+      ],
+      "dependencies": [
+        "esy-libffi@3.3.1@d41d8cd9", "@opam/conf-pkg-config@opam:2@85f8644d",
+        "@opam/conf-libffi@opam:2.0.0@07796c0b",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [ "@opam/conf-libffi@opam:2.0.0@07796c0b" ]
+    },
+    "@opam/ctypes@opam:0.20.0@4e68beca": {
+      "id": "@opam/ctypes@opam:0.20.0@4e68beca",
+      "name": "@opam/ctypes",
+      "version": "opam:0.20.0",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/md5/e2/e286bc69e536e581529f01059dd4bbb3#md5:e286bc69e536e581529f01059dd4bbb3",
+          "archive:https://github.com/ocamllabs/ocaml-ctypes/archive/0.20.0.tar.gz#md5:e286bc69e536e581529f01059dd4bbb3"
+        ],
+        "opam": {
+          "name": "ctypes",
+          "version": "0.20.0",
+          "path": "esy.lock/opam/ctypes.0.20.0"
+        }
+      },
+      "overrides": [
+        {
+          "opamoverride":
+            "esy.lock/overrides/opam__s__ctypes_opam__c__0.20.0_opam_override"
+        }
+      ],
+      "dependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/ocamlfind@opam:1.9.3@781b30f3",
+        "@opam/integers@opam:0.6.0@0cc267a8",
+        "@opam/ctypes-foreign@opam:0.18.0@d7de6eb2",
+        "@opam/bigarray-compat@opam:1.1.0@84cda9d0",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/integers@opam:0.6.0@0cc267a8",
+        "@opam/bigarray-compat@opam:1.1.0@84cda9d0"
+      ]
+    },
     "@opam/cstruct@opam:6.0.1@69eae449": {
       "id": "@opam/cstruct@opam:6.0.1@69eae449",
       "name": "@opam/cstruct",
@@ -1504,6 +1721,32 @@
         "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69"
       ]
     },
+    "@opam/cpu@opam:2.0.0@595d6879": {
+      "id": "@opam/cpu@opam:2.0.0@595d6879",
+      "name": "@opam/cpu",
+      "version": "opam:2.0.0",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/md5/64/644ca40ddbe7c34f8431ec3868958aec#md5:644ca40ddbe7c34f8431ec3868958aec",
+          "archive:https://github.com/UnixJunkie/cpu/archive/v2.0.0.tar.gz#md5:644ca40ddbe7c34f8431ec3868958aec"
+        ],
+        "opam": {
+          "name": "cpu",
+          "version": "2.0.0",
+          "path": "esy.lock/opam/cpu.2.0.0"
+        }
+      },
+      "overrides": [],
+      "dependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69",
+        "@opam/conf-autoconf@opam:0.1@51d13015",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69"
+      ]
+    },
     "@opam/cppo@opam:1.6.8@7e48217d": {
       "id": "@opam/cppo@opam:1.6.8@7e48217d",
       "name": "@opam/cppo",
@@ -1531,6 +1774,39 @@
         "@opam/base-unix@opam:base@87d0b2eb"
       ]
     },
+    "@opam/conf-which@opam:1@f2a4f9c4": {
+      "id": "@opam/conf-which@opam:1@f2a4f9c4",
+      "name": "@opam/conf-which",
+      "version": "opam:1",
+      "source": {
+        "type": "install",
+        "source": [ "no-source:" ],
+        "opam": {
+          "name": "conf-which",
+          "version": "1",
+          "path": "esy.lock/opam/conf-which.1"
+        }
+      },
+      "overrides": [],
+      "dependencies": [ "@esy-ocaml/substs@0.0.1@d41d8cd9" ],
+      "devDependencies": []
+    },
+    "@opam/conf-texinfo@github:esy-packages/esy-texinfo:package.json#4a05feafbbcc4c57d5d25899fbdab98961b9a69c@d41d8cd9": {
+      "id":
+        "@opam/conf-texinfo@github:esy-packages/esy-texinfo:package.json#4a05feafbbcc4c57d5d25899fbdab98961b9a69c@d41d8cd9",
+      "name": "@opam/conf-texinfo",
+      "version":
+        "github:esy-packages/esy-texinfo:package.json#4a05feafbbcc4c57d5d25899fbdab98961b9a69c",
+      "source": {
+        "type": "install",
+        "source": [
+          "github:esy-packages/esy-texinfo:package.json#4a05feafbbcc4c57d5d25899fbdab98961b9a69c"
+        ]
+      },
+      "overrides": [],
+      "dependencies": [],
+      "devDependencies": []
+    },
     "@opam/conf-pkg-config@opam:2@85f8644d": {
       "id": "@opam/conf-pkg-config@opam:2@85f8644d",
       "name": "@opam/conf-pkg-config",
@@ -1552,6 +1828,83 @@
       ],
       "dependencies": [
         "yarn-pkg-config@github:esy-ocaml/yarn-pkg-config#db3a0b63883606dd57c54a7158d560d6cba8cd79@d41d8cd9",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": []
+    },
+    "@opam/conf-libsodium@opam:1@d2bba2e2": {
+      "id": "@opam/conf-libsodium@opam:1@d2bba2e2",
+      "name": "@opam/conf-libsodium",
+      "version": "opam:1",
+      "source": {
+        "type": "install",
+        "source": [ "no-source:" ],
+        "opam": {
+          "name": "conf-libsodium",
+          "version": "1",
+          "path": "esy.lock/opam/conf-libsodium.1"
+        }
+      },
+      "overrides": [
+        {
+          "opamoverride":
+            "esy.lock/overrides/opam__s__conf_libsodium_opam__c__1_opam_override"
+        }
+      ],
+      "dependencies": [
+        "esy-libsodium@1.0.18002@d41d8cd9",
+        "@opam/conf-pkg-config@opam:2@85f8644d",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": []
+    },
+    "@opam/conf-libffi@opam:2.0.0@07796c0b": {
+      "id": "@opam/conf-libffi@opam:2.0.0@07796c0b",
+      "name": "@opam/conf-libffi",
+      "version": "opam:2.0.0",
+      "source": {
+        "type": "install",
+        "source": [ "no-source:" ],
+        "opam": {
+          "name": "conf-libffi",
+          "version": "2.0.0",
+          "path": "esy.lock/opam/conf-libffi.2.0.0"
+        }
+      },
+      "overrides": [
+        {
+          "opamoverride":
+            "esy.lock/overrides/opam__s__conf_libffi_opam__c__2.0.0_opam_override"
+        }
+      ],
+      "dependencies": [
+        "esy-libffi@3.3.1@d41d8cd9", "@opam/conf-pkg-config@opam:2@85f8644d",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": []
+    },
+    "@opam/conf-autoconf@opam:0.1@51d13015": {
+      "id": "@opam/conf-autoconf@opam:0.1@51d13015",
+      "name": "@opam/conf-autoconf",
+      "version": "opam:0.1",
+      "source": {
+        "type": "install",
+        "source": [ "no-source:" ],
+        "opam": {
+          "name": "conf-autoconf",
+          "version": "0.1",
+          "path": "esy.lock/opam/conf-autoconf.0.1"
+        }
+      },
+      "overrides": [
+        {
+          "opamoverride":
+            "esy.lock/overrides/opam__s__conf_autoconf_opam__c__0.1_opam_override"
+        }
+      ],
+      "dependencies": [
+        "esy-autoconf@github:esy-packages/esy-autoconf#fb93edf@d41d8cd9",
+        "@opam/conf-which@opam:1@f2a4f9c4",
         "@esy-ocaml/substs@0.0.1@d41d8cd9"
       ],
       "devDependencies": []
@@ -1684,6 +2037,23 @@
       "devDependencies": [
         "ocaml@4.13.1000@d41d8cd9", "@opam/ocamlfind@opam:1.9.3@781b30f3"
       ]
+    },
+    "@opam/base-bigarray@opam:base@b03491b0": {
+      "id": "@opam/base-bigarray@opam:base@b03491b0",
+      "name": "@opam/base-bigarray",
+      "version": "opam:base",
+      "source": {
+        "type": "install",
+        "source": [ "no-source:" ],
+        "opam": {
+          "name": "base-bigarray",
+          "version": "base",
+          "path": "esy.lock/opam/base-bigarray.base"
+        }
+      },
+      "overrides": [],
+      "dependencies": [ "@esy-ocaml/substs@0.0.1@d41d8cd9" ],
+      "devDependencies": []
     },
     "@opam/base@opam:v0.14.3@b3ddb868": {
       "id": "@opam/base@opam:v0.14.3@b3ddb868",

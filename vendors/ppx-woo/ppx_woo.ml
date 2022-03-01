@@ -49,6 +49,7 @@ module Make(Params : Woo_helpers.PARAMS) = struct
           let exn = Matching.matching_exn_full ?wrap_get variant in
           let opt = Matching.matching_opt_full ?wrap_get variant in
           let cons = Constructors.constructors ?wrap_constructor variant in
+          let cons' = Constructors.constructors' ?wrap_constructor variant in
           let mappers = Cases.mappers ?wrap_map variant in
           let setters = Cases.setters ?wrap_map variant in
           let destruct = Variant.destruct prefix variant in
@@ -56,6 +57,7 @@ module Make(Params : Woo_helpers.PARAMS) = struct
           []
           @ cons_types
           @ cons
+          @ cons'
           @ mappers
           @ setters
           @ is

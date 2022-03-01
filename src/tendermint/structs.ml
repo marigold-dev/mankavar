@@ -55,7 +55,7 @@ module Block = struct
       height : Height.t ;
       time : Ptime.t ;
       previous_hash : Hash'.t ;
-      (* state_hash : Hash'.t ; *)
+      state_hash : Transition.State.t Hash.t ;
     }
     [@@deriving ez]
     (* let encoding = Encoding.(
@@ -63,8 +63,8 @@ module Block = struct
       tuple_5 string Height.encoding XPtime.encoding Hash'.encoding Hash'.encoding
     ) *)
     let encoding = Encoding.(
-      conv (fun (x1, x2, x3, x4) -> make_tpl x1 x2 x3 x4) destruct @@
-      tuple_4 string Height.encoding XPtime.encoding Hash'.encoding
+      conv make_tpl' destruct @@ tuple_5
+        string Height.encoding XPtime.encoding Hash'.encoding Hash.encoding
     )
   end
   
@@ -256,7 +256,7 @@ module BlockInfo = struct
   let block_to_hash x = x |> block_to_bytes |> do_hash
 end
 
-module Message = struct
+module ConsensusMessage = struct
   (* 
     `Block_proposal`, `Prevote` and `Precommitment` are Tendermint messages.
     `Block` is just the block, to populate the db.
@@ -279,4 +279,23 @@ module Message = struct
     ~precommitment:(prefix "Precommitment: " (Precommitment.pp) ppf)
     ~commitment:(prefix "Commitment: " (Commitment.pp) ppf)
     ~block:(prefix "Block: " (BlockInfo.pp) ppf)
+end
+
+module Message = struct
+  type t =
+  | Consensus of ConsensusMessage.t
+  | Operation of Transition.Operation.t
+  [@@deriving ez]
+
+  let pp : _ -> t -> unit = fun ppf ->
+    destruct
+    ~consensus:(ConsensusMessage.pp ppf)
+    ~operation:(Transition.Operation.pp ppf)
+
+  let block_proposal x = consensus @@ ConsensusMessage.block_proposal x
+  let prevote x = consensus @@ ConsensusMessage.prevote x
+  let block x = consensus @@ ConsensusMessage.block x
+  let precommitment x = consensus @@ ConsensusMessage.precommitment x
+  let commitment x = consensus @@ ConsensusMessage.commitment x
+
 end

@@ -1,0 +1,8 @@
+(library
+ (name fifo_interop)
+ (libraries
+  das_helpers
+
+  unix
+ )
+)

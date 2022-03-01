@@ -7,6 +7,7 @@ module Operation : sig
   (* max gas that can be used to process the operation *)
   val get_max_gas : t -> int64
   val encoding : t Encoding.t
+  val pp : Format.formatter -> t -> unit
 end
 
 module Bunch : sig
@@ -25,6 +26,7 @@ end
 module State : sig
   type t
   val empty : t
+  val do_hash : t -> t Hash.t
 end
 
 (*

@@ -1,3 +1,5 @@
+open Das_helpers
+
 module Value = struct
   type t = int64
   let succ = Int64.succ
@@ -14,7 +16,7 @@ module Value = struct
   let not_ a = if is_zero a then true_ else false_
   let zero = Int64.zero
   let of_int = Int64.of_int
-  module Map = Map.Make(Int64)
+  module Map = XMap.Make(Int64)
   let pp ppf = Format.fprintf ppf "%Ld"
 end
 

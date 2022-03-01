@@ -15,6 +15,7 @@ type 'a t =
 and 'a case = Case : ('a -> 'b option) * ('b -> 'a) * 'b t -> 'a case
 
 let case forth back x = Case (forth , back , x)
+let case_tpl (forth , back , x) = case forth back x
 let union lst = Union lst
 let unit = Unit
 let int32 = Int32
@@ -31,6 +32,36 @@ let int = conv Int64.to_int Int64.of_int int64
 let list x = List x
 let array a = conv (Array.of_list) (Array.to_list) @@ list a
 let dummy default = conv (fun () -> default) (fun _ -> ()) unit
+
+module Size = struct
+  let rec main : type a . a t -> a -> int = fun e ->
+    match e with
+    | Unit -> fun () -> 1
+    | Int32 -> fun _ -> 4
+    | Int64 -> fun _ -> 8
+    | String -> fun s -> String.length s
+    | Bytes -> fun b -> Bytes.length b
+    | Union lst -> fun x -> (
+      PseudoEffect.returner @@ fun { return } ->
+      List.iter (fun (Case (forth , _back , a)) ->
+        match forth x with
+        | Some x' -> return @@ main a x'
+        | None -> ()
+      ) lst ;
+      failwith "no matching case in variant"      
+    )
+    | List a -> fun lst -> List.fold_left (+) 0 @@ List.map (main a) lst
+    | Tuple_2 (a , b) -> fun (x1 , x2) ->
+      main a x1 + main b x2
+    | Tuple_3 (a , b , c) -> fun (x1 , x2 , x3) ->
+      main a x1 + main b x2 + main c x3
+    | Tuple_4 (a , b , c , d) -> fun (x1 , x2 , x3 , x4) ->
+      main a x1 + main b x2 + main c x3 + main d x4
+    | Tuple_5 (a , b , c , d , e) -> fun (x1 , x2 , x3 , x4 , x5) ->
+      main a x1 + main b x2 + main c x3 + main d x4 + main e x5
+    | Conv (_forth , back , a) -> fun x -> main a @@ back x
+end
+let size = Size.main
 
 module To_bytes = struct
   (* 

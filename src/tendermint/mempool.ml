@@ -39,6 +39,7 @@ let empty = []
 
 let add x t =
   let item = item_make x in
+  if List.length t >= max_size then t else
   if List.exists (fun x -> Hash.compare item.hash x.hash = 0) t
   then t
   else item :: t

@@ -1,0 +1,14 @@
+(executable
+ (name para)
+ (libraries
+  mtime
+
+  sodium
+  parany
+ )
+)
+
+(rule
+ (alias bench)
+ (action (run ./para.exe))
+)
