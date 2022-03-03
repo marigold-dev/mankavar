@@ -1,15 +1,10 @@
 open Das_helpers
 
-let do_hash : bytes -> bytes = Do_hash.blake2b
+let do_hash : bytes -> bytes = Crypto.blake2b
 
 module Op = Transition.Operation
 type op = Op.t
-let do_op_hash' op =
-  op
-  |> Encoding.to_bytes Op.encoding 
-let do_op_hash = Hash.make do_op_hash'
-
-
+let do_op_hash = Op.do_hash
 
 module Raw = struct
 (*

@@ -5,8 +5,8 @@ open Das_network
 
 module Send = Node.Send
 module TCQ = TaskClockedQueue
-module Addr = Account.Address
-module Sig = Account.Signature
+module Addr = Crypto.Address
+module Sig = Crypto.Signature
 
 let nb_endorsers = 10
 let block_time_ms = 1_000
@@ -30,16 +30,16 @@ module Block = struct
   end
   type t = {
     content : Candidate.t ;
-    endorsements : Candidate.t Account.Signature.t ;
-    producer_signature : Candidate.t Account.Signature.t ;
+    endorsements : Candidate.t Sig.t ;
+    producer_signature : Candidate.t Sig.t ;
   }
   [@@deriving ez]
 end
 
 module Message = struct
   type t =
-  | Block_proposal of Block.Candidate.t Account.Signature.signed
-  | Endorsement of Block.Candidate.t Account.Signature.signed
+  | Block_proposal of Block.Candidate.t Sig.signed
+  | Endorsement of Block.Candidate.t Sig.signed
   [@@deriving ez]
 
   let prefix str f ppf x =
@@ -47,8 +47,8 @@ module Message = struct
 
   let pp : _ -> t -> unit = fun ppf ->
     destruct_tpl
-    (prefix "Block_proposal:" (Account.Signature.pp_signed (fun _ _ -> ())) ppf)
-    (prefix "Endorsement:" (Account.Signature.pp_signed (fun _ _ -> ())) ppf)
+    (prefix "Block_proposal:" (Sig.pp_signed (fun _ _ -> ())) ppf)
+    (prefix "Endorsement:" (Sig.pp_signed (fun _ _ -> ())) ppf)
 end
 
 module RawBlockProducerNode = struct
@@ -66,9 +66,9 @@ module RawBlockProducerNode = struct
   type t = {
     account : Addr.t ;
     clock : Ptime.t ;
-    endorsers : Account.Address.public_key list ;
+    endorsers : Addr.public_key list ;
     height : Height.t ;
-    endorsements : Block.Candidate.t Account.Signature.t list Height.Map.t ;
+    endorsements : Block.Candidate.t Sig.t list Height.Map.t ;
     state : LocalState.t ;
   }
   [@@deriving ez]
@@ -183,8 +183,8 @@ module RawEndorserNode = struct
   *)
 
   type t = {
-    producer : Account.Address.public_key ;
-    account : Account.Address.t ;
+    producer : Addr.public_key ;
+    account : Addr.t ;
   }
   [@@deriving ez]
 
@@ -198,16 +198,16 @@ module RawEndorserNode = struct
     m |> Message.destruct
     ~endorsement:(fun _ -> [] , t)
     ~block_proposal:(fun bc_signed ->
-      let signature = Account.Signature.get bc_signed in
-      let bc = Account.Signature.content bc_signed in
-      if not @@ Account.Signature.check_raw
+      let signature = Sig.get bc_signed in
+      let bc = Sig.content bc_signed in
+      if not @@ Sig.check_raw
         ~public_key:(producer t) ~signature ~content:bc
         ~to_hash:Block.Candidate.to_bytes
         then [] , t
       else (
-        let sk = t |> account |> Account.Address.secret_key in
+        let sk = t |> account |> Addr.secret_key in
         let signed =
-          Account.Signature.sign_raw
+          Sig.sign_raw
             ~secret_key:sk ~content:bc ~to_hash:Block.Candidate.to_bytes
         in
         [Send.broadcast @@ Message.endorsement signed] , t

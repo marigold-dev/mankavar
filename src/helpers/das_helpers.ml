@@ -1,8 +1,10 @@
-module Account = Account
+module Crypto = Crypto
 module PseudoEffect = PseudoEffect
 module Encoding = Encoding
 module XOption = XOption
 module Linear_state = Linear_state
+module Bimap = Bimap
+module XMap = XMap
 
 let tuple2 x y = (x , y)
 let tuple3 x y z = (x , y, z)
@@ -12,7 +14,11 @@ module XBool = struct
 end
 
 module XInt64 = struct
+  include Int64
   let compare = Int64.compare
+  let encoding = Encoding.int64
+  let pp' = Format.dprintf "%Ld"
+  let pp = Fun.flip pp'
   let (<) (a : Int64.t) b = a < b
   let (<=) (a : Int64.t) b = a <= b
   let (>) (a : Int64.t) b = a > b
@@ -47,6 +53,7 @@ module XFormat = struct
   let conv f pp ppf x = pp ppf @@ f x
 
   let int64 ppf = Format.fprintf ppf "%Ld"
+  let int64' = Fun.flip int64
 end
 
 module Hash : sig
@@ -177,26 +184,6 @@ module XList = struct
       | x :: y :: tl -> if f i x y then aux (i + 1) (y :: tl) else false
     in
     aux 0
-end
-
-module XMap = struct
-  module type S = sig
-    include Map.S
-    val to_list : 'a t -> (key * 'a) list
-    val of_list : (key * 'a) list -> 'a t
-  end
-  module Make(P : Map.OrderedType) : S with type key = P.t = struct
-    include Map.Make(P)
-    let to_list t =
-      t
-      |> to_seq
-      |> List.of_seq
-    
-    let of_list lst =
-      lst
-      |> List.to_seq
-      |> of_seq
-  end
 end
 
 module Index = struct

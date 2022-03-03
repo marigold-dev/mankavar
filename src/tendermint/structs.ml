@@ -4,10 +4,10 @@ open Das_helpers
 open Transition
 
 module TCQ = TaskClockedQueue
-module Addr = Account.Address
-module Sig = Account.Signature
+module Addr = Crypto.Address
+module Sig = Crypto.Signature
 
-let do_hash : bytes -> bytes = Do_hash.blake2b
+let do_hash : bytes -> bytes = Crypto.blake2b
 
 module Round = struct
   module Index = Index.Make()

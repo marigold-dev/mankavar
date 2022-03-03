@@ -1,3 +1,3 @@
 module Helpers = Das_helpers
-module Account = Helpers.Account
+module Crypto = Helpers.Crypto
 module Consensus_dummy = Consensus_dummy

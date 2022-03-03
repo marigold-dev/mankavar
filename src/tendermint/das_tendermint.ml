@@ -2,8 +2,8 @@ open Das_helpers
 open Das_network
 
 module TCQ = TaskClockedQueue
-module Addr = Account.Address
-module Sig = Account.Signature
+module Addr = Crypto.Address
+module Sig = Crypto.Signature
 module Send = Node.Send
 
 let nb_endorsers = 10
@@ -36,7 +36,7 @@ module RawTendermintNode = struct
     network : string ;
     account : Addr.t ;
     clock : Ptime.t ;
-    endorsers : Account.Address.public_key list ;
+    endorsers : Addr.public_key list ;
     height : Height.t ;
     round : Round.Index.t ;
     lock : Lock.t option ;
@@ -94,7 +94,7 @@ module RawTendermintNode = struct
     of given height and round
   *)
   let get_proposer
-  : endorsers -> height -> Round.Index.t -> t -> Account.Address.public_key
+  : endorsers -> height -> Round.Index.t -> t -> Addr.public_key
   = fun lst h r _ ->
     let l = List.length lst in
     let h' =
@@ -107,7 +107,7 @@ module RawTendermintNode = struct
     let i = (h' + r') mod l in
     List.nth lst i
 
-  let get_current_proposer : t -> Account.Address.public_key = fun t ->
+  let get_current_proposer : t -> Addr.public_key = fun t ->
     get_proposer (t|>endorsers) (t|>height) (t|>round) t
 
   let do_prevote_current
@@ -137,7 +137,7 @@ module RawTendermintNode = struct
   type message = Message.t
   type consensus_message = ConsensusMessage.t
 
-  let empty ~network clock endorsers account : t =
+  let empty ~network ~chain_state clock endorsers account : t =
     let height = Height.zero in
     let step_state = StepState.proposal @@ ProposalState.no_proposal in
     let commitments = CommitmentState.empty in
@@ -145,7 +145,6 @@ module RawTendermintNode = struct
     let lock = Option.none in
     let round = Round.Index.zero in
     let blocks = Blocks.empty in
-    let chain_state = Transition.State.empty in
     let mempool = Mempool.empty in
     make
       ~account ~clock ~endorsers ~height ~step_state
@@ -355,6 +354,7 @@ module RawTendermintNode = struct
     in *)
     if Ptime.Span.(compare time_since_step (t|>step_timeout) < 0) then
       return ([] , t) ;
+
     t
     |> set_step_start_time new_clock
     |> fun t -> t
@@ -372,8 +372,13 @@ module RawTendermintNode = struct
     let noop x = return @@ noop t x in
     (* Format.printf "Receiving block proposal@;%!" ; *)
     (* Check Previous Commitments *) (
-      XBool.do_if_true (not @@ Height.equal (t |> height) Height.zero) @@ fun () ->
-      let bh = bp |> BlockProposal.block |> Block.header |> Block.Header.previous_hash in
+      XBool.do_if_true (not @@ Height.equal (t |> height) Height.zero)
+      @@ fun () ->
+      let bh =
+        bp
+        |> BlockProposal.block |> Block.header
+        |> Block.Header.previous_hash
+      in
       let uc
       = Commitment.unsigned_make_tpl bh (Height.predecessor @@ height t) in
       (* Format.printf "grep uc : %a@;%!" Commitment.pp_unsigned uc ; *)
@@ -400,14 +405,14 @@ module RawTendermintNode = struct
     PseudoEffect.returner @@ fun { return } ->
     let noop x = return @@ noop t x in
     (* Format.printf "Receiving prevote in step_state %a@;%!" StepState.pp (t |> step_state) ; *)
-
     let threshold = prevote_threshold in
-    t |> step_state
-    |> StepState.get_prevote_opt |> XOption.value' noop
-    (* |> fun x -> Format.printf "adding prevote@;%!" ; x *)
-    |> PrevoteState.add ~threshold pv
-    |> StepState.prevote |> fun x -> set_step_state x t
-    |> fun t ->
+    let t =
+      t |> step_state
+      |> StepState.get_prevote_opt |> XOption.value' noop
+      (* |> fun x -> Format.printf "adding prevote@;%!" ; x *)
+      |> PrevoteState.add ~threshold pv
+      |> StepState.prevote |> fun x -> set_step_state x t
+    in
     (* Format.printf "Lock? %b@;%!" (
       t |> step_state
       |> StepState.get_prevote_opt |> XOption.value' noop
@@ -453,6 +458,12 @@ module RawTendermintNode = struct
     let t
     = t |> map_blocks @@ Blocks.finalize h bh in
     let t = t |> set_lock None in
+    let t = t |> map_mempool @@ (fun m ->
+    Transition.Bunch.to_list (Block.operations b) |> List.fold_left (fun m op ->
+      let oph = Transition.Operation.do_hash op in
+      Mempool.remove oph m
+    ) m )
+    in
     Format.printf "Committed block@;%!" ;
     t
 

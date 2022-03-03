@@ -2,8 +2,8 @@ open Das_helpers
 open Das_network
 
 module TCQ = TaskClockedQueue
-module Addr = Account.Address
-module Sig = Account.Signature
+module Addr = Crypto.Address
+module Sig = Crypto.Signature
 module Send = Node.Send
 
 open Structs

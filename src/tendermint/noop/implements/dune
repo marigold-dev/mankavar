@@ -1,0 +1,7 @@
+(library
+ (name das_tendermint_noop)
+ (libraries
+  das_tendermint_noop_raw
+ )
+ (implements das_tendermint)
+)

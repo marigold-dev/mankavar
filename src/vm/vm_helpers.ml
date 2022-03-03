@@ -16,6 +16,8 @@ module Value = struct
   let not_ a = if is_zero a then true_ else false_
   let zero = Int64.zero
   let of_int = Int64.of_int
+  let compare : t -> t -> int = Int64.compare
+  let encoding = Encoding.int64
   module Map = XMap.Make(Int64)
   let pp ppf = Format.fprintf ppf "%Ld"
 end

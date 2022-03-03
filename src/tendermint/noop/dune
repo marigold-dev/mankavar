@@ -1,4 +1,6 @@
 (library
- (name das_tendermint_noop)
- (implements das_tendermint)
+ (name das_tendermint_noop_raw)
+ (libraries
+  das_helpers
+ )
 )

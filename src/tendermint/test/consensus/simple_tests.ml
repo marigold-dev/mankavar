@@ -14,22 +14,32 @@ end)
 let test_quick name f =
   Alcotest.test_case name `Quick f
 
-let dummy_accounts = List.init 100 (fun _ -> Account.Address.generate ())
+let dummy_accounts = List.init 100 (fun _ -> Crypto.Address.generate ())
 
 let nth_account i = List.nth dummy_accounts i
+
+let mk_empty_node endorsers account =
+  let start_clock = XPtime.now () in
+  let chain_state = (
+    Obj.magic
+    (Das_tendermint_noop_raw.Transition.State.mk_empty ())
+    : Das_tendermint.Transition.State.t
+  ) in
+  TendermintNode.empty start_clock endorsers account
+    ~network:"test" ~chain_state
 
 let honest_live = test_quick "Live when nodes honest" @@ fun () ->
   (* ignore @@ assert false ; *)
   let module Start = struct
-    let start_clock = XPtime.now ()
     let endorsers = List.init CD.nb_endorsers nth_account
-    let endorsers_pk = endorsers |> List.map Account.Address.public_key
+    let endorsers_pk = endorsers |> List.map Crypto.Address.public_key
     let endorsers_node =
-      List.map (TendermintNode.empty start_clock endorsers_pk ~network:"test") endorsers
+      List.map (mk_empty_node endorsers_pk) endorsers
     let endorsers_node_packed =
       List.map
         (Node.Packed.pack_abstract (module TendermintNode))
         endorsers_node
+    let start_clock = XPtime.now ()
     let network =
       Network.empty start_clock endorsers_node_packed
   end in
@@ -47,9 +57,9 @@ let third_live = test_quick "Live when 1/3 nodes dead" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let endorsers = List.init CD.nb_endorsers nth_account
-    let endorsers_pk = endorsers |> List.map Account.Address.public_key
+    let endorsers_pk = endorsers |> List.map Crypto.Address.public_key
     let ok_endorsers_node =
-      List.map (TendermintNode.empty start_clock endorsers_pk ~network:"test")
+      List.map (mk_empty_node endorsers_pk)
       @@ List.filteri (fun i _ -> i >= CD.max_byzantine) endorsers
     let ok_endorsers_node_packed =
       List.map
@@ -79,9 +89,9 @@ let third_plus_dead = test_quick "Dead when 1+1/3 nodes dead" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let endorsers = List.init CD.nb_endorsers nth_account
-    let endorsers_pk = endorsers |> List.map Account.Address.public_key
+    let endorsers_pk = endorsers |> List.map Crypto.Address.public_key
     let ok_endorsers_node =
-      List.map (TendermintNode.empty start_clock endorsers_pk ~network:"test")
+      List.map (mk_empty_node endorsers_pk)
       @@ List.filteri (fun i _ -> i >= 1 + CD.max_byzantine) endorsers
     let ok_endorsers_node_packed =
       List.map

@@ -3,12 +3,11 @@
  (libraries
   das_helpers
   das_vm
-
-  do_hash
  )
  (preprocess
   (pps
    ppx_woo
+   ppx_deriving.ord
   )
  )
 )

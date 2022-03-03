@@ -12,7 +12,7 @@ end)
 let test_quick name f =
   Alcotest.test_case name `Quick f
 
-let dummy_accounts = List.init 100 (fun _ -> Das.Account.Address.generate ())
+let dummy_accounts = List.init 100 (fun _ -> Crypto.Address.generate ())
 
 let nth_account i = List.nth dummy_accounts i
 
@@ -20,9 +20,9 @@ let honest = test_quick "Live when nodes honest" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let bp = nth_account 0
-    let bp_pk = Das.Account.Address.public_key bp
+    let bp_pk = Crypto.Address.public_key bp
     let endorsers = List.init CD.nb_endorsers (fun i -> nth_account (i + 1))
-    let endorsers_pk = endorsers |> List.map Das.Account.Address.public_key
+    let endorsers_pk = endorsers |> List.map Crypto.Address.public_key
     let bp_node = CD.RawBlockProducerNode.empty start_clock endorsers_pk bp
     let endorsers_node = List.map (CD.RawEndorserNode.empty bp_pk) endorsers
     let bp_node_packed =
@@ -48,7 +48,7 @@ let third_dead = test_quick "Live when 1/3 endorsers dead" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let bp = nth_account 0
-    let bp_pk = Das.Account.Address.public_key bp
+    let bp_pk = Crypto.Address.public_key bp
     let dead_endorsers =
       List.init
         (CD.nb_endorsers / 3)
@@ -58,7 +58,7 @@ let third_dead = test_quick "Live when 1/3 endorsers dead" @@ fun () ->
         (CD.nb_endorsers - CD.nb_endorsers / 3)
         (fun i -> nth_account (i + 1 + CD.nb_endorsers / 3))
     let endorsers = dead_endorsers @ live_endorsers
-    let endorsers_pk = endorsers |> List.map Das.Account.Address.public_key
+    let endorsers_pk = endorsers |> List.map Crypto.Address.public_key
     let bp_node = CD.RawBlockProducerNode.empty start_clock endorsers_pk bp
     let dead_endorsers_node = List.map (fun _ -> CD.RawDeadNode.empty) dead_endorsers
     let live_endorsers_node = List.map (CD.RawEndorserNode.empty bp_pk) live_endorsers
@@ -89,7 +89,7 @@ let third_plus_dead = test_quick "Dead when 1+1/3 nodes dead" @@ fun () ->
   let module Start = struct
     let start_clock = XPtime.now ()
     let bp = nth_account 0
-    let bp_pk = Das.Account.Address.public_key bp
+    let bp_pk = Crypto.Address.public_key bp
     let dead_endorsers =
       List.init
         (1 + CD.nb_endorsers / 3)
@@ -99,7 +99,7 @@ let third_plus_dead = test_quick "Dead when 1+1/3 nodes dead" @@ fun () ->
         (CD.nb_endorsers - 1 - CD.nb_endorsers / 3)
         (fun i -> nth_account (i + 1 + 1 + CD.nb_endorsers / 3))
     let endorsers = dead_endorsers @ live_endorsers
-    let endorsers_pk = endorsers |> List.map Das.Account.Address.public_key
+    let endorsers_pk = endorsers |> List.map Crypto.Address.public_key
     let bp_node = CD.RawBlockProducerNode.empty start_clock endorsers_pk bp
     let dead_endorsers_node = List.map (fun _ -> CD.RawDeadNode.empty) dead_endorsers
     let live_endorsers_node = List.map (CD.RawEndorserNode.empty bp_pk) live_endorsers

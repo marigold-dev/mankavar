@@ -22,15 +22,23 @@ let int32 = Int32
 let int64 = Int64
 let string = String
 let bytes = Bytes
+let conv forth back x = Conv (forth , back , x)
 let tuple_2 a b = Tuple_2 (a , b)
 let tuple_3 a b c = Tuple_3 (a , b , c)
 let tuple_4 a b c d = Tuple_4 (a , b , c , d)
 let tuple_5 a b c d e = Tuple_5 (a , b , c , d , e)
+let tuple_6 a b c d e f =
+  conv (fun ((a , b , c , d , e) , f) -> a , b , c , d , e , f)
+  (fun (a , b , c , d , e , f) -> (a , b , c , d , e) , f) @@
+  tuple_2 (tuple_5 a b c d e) f
 let pair = tuple_2
-let conv forth back x = Conv (forth , back , x)
 let int = conv Int64.to_int Int64.of_int int64
 let list x = List x
 let array a = conv (Array.of_list) (Array.to_list) @@ list a
+let option a = union [
+  case (fun x -> x) Option.some a ;
+  case (function Some _ -> None | None -> Some ()) (fun () -> None) unit ;
+]
 let dummy default = conv (fun () -> default) (fun _ -> ()) unit
 
 module Size = struct

@@ -7,7 +7,6 @@
   ; local
   das_helpers
   das_network
-  do_hash
  )
  (preprocess
   (pps

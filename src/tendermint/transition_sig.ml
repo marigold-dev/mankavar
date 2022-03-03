@@ -8,6 +8,8 @@ module Operation : sig
   val get_max_gas : t -> int64
   val encoding : t Encoding.t
   val pp : Format.formatter -> t -> unit
+  val do_hash : t -> t Hash.t
+  val do_hash' : t -> Hash'.t
 end
 
 module Bunch : sig
@@ -21,12 +23,13 @@ module Bunch : sig
   type t
   val dummy : t
   val make : Operation.t list -> t
+  val to_list : t -> Operation.t list
   val encoding : t Encoding.t
 end
 
 module State : sig
   type t
-  val empty : t
+  val mk_empty : unit -> t
   val do_hash : t -> t Hash.t
 end
 
