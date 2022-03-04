@@ -199,6 +199,8 @@ module State = struct
       t.keys <- AKBMap.forth_add pk key_index t.keys ;
       t.ledger <- AMap.add account_index amount t.ledger ;
       account_index
+
+    let get_balance x t = AMap.find x t.ledger
   end
 
   let encoding = Encoding.(
@@ -300,12 +302,12 @@ let do_origination op state : do_operation_result =
   (* ignore op ; ignore state ; assert false *)
 
 let do_operation op =
-  Format.printf "DO OPERATION@;\n" ;
+  (* Format.printf "DO OPERATION@;\n" ; *)
   Operation.destruct op ~transfer:do_transfer ~origination:do_origination
 
 let do_bunch (bunch : Bunch.t) state =
   let aux state op =
     (do_operation op state).state
   in
-  Format.printf "DO BUNCH %d@;\n" @@ List.length bunch ;
+  (* Format.printf "DO BUNCH %d@;\n" @@ List.length bunch ; *)
   List.fold_left aux state bunch
