@@ -103,7 +103,7 @@
       },
       "overrides": [],
       "dependencies": [
-        "ocaml@4.13.1000@d41d8cd9", "@opam/sodium@opam:0.2.1@820b26c4",
+        "ocaml@4.13.1000@d41d8cd9", "@opam/sodium@opam:0.2.1@ff57631f",
         "@opam/ptime@opam:0.8.6@5df936b0",
         "@opam/ppxlib@opam:0.23.0@b29cda02",
         "@opam/ppx_protocol_conv_json@opam:5.2.0@1d1cd9e9",
@@ -314,8 +314,8 @@
         "ocaml@4.13.1000@d41d8cd9", "@opam/dune@opam:2.9.3@f57a6d69"
       ]
     },
-    "@opam/sodium@opam:0.2.1@820b26c4": {
-      "id": "@opam/sodium@opam:0.2.1@820b26c4",
+    "@opam/sodium@opam:0.2.1@ff57631f": {
+      "id": "@opam/sodium@opam:0.2.1@ff57631f",
       "name": "@opam/sodium",
       "version": "opam:0.2.1",
       "source": {

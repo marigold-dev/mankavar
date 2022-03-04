@@ -1,0 +1,5 @@
+(test
+ (name ml_main)
+ (foreign_stubs (language c) (names c_main))
+ (modes exe)
+)

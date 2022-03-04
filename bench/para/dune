@@ -6,7 +6,12 @@
   sodium
   parany
  )
+ (flags (:include flags.sexp))
 )
+
+(rule
+ (targets flags.sexp)
+ (action (run ./configurator/main.exe)))
 
 (rule
  (alias bench)
