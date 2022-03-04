@@ -1,8 +1,19 @@
 (executable
+ (name configurator)
+ (modules configurator)
+ (flags (:standard))
+ (libraries dune-configurator))
+
+(rule
+ (targets flags.sexp)
+ (action (run ./configurator.exe)))
+
+(executable
  (name para)
+ (flags (:include flags.sexp))
+ (modules :standard \ configurator)
  (libraries
   mtime
-
   sodium
   parany
  )
