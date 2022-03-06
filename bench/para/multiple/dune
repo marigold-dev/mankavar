@@ -2,11 +2,12 @@
  (name para)
  (libraries
   mtime
+  mtime.clock.os
 
   sodium
   parany
  )
- (flags (:include flags.sexp))
+ (flags ("-cclib" "-lsodium"))
  (modes exe)
 )
 

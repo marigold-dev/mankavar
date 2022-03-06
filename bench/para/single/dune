@@ -1,0 +1,21 @@
+(executable
+ (name para)
+ (libraries
+  mtime
+  mtime.clock.os
+
+  sodium
+  parany
+ )
+ (flags ("-cclib" "-lsodium"))
+ (modes exe)
+)
+
+(rule
+ (targets flags.sexp)
+ (action (run ./configurator/main.exe)))
+
+(rule
+ (alias bench)
+ (action (run ./para.exe))
+)

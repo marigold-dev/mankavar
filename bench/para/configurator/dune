@@ -1,4 +1,0 @@
-(executable
- (name main)
- (flags (:standard))
- (libraries dune-configurator))
