@@ -3,6 +3,8 @@
  (libraries
   ; local
   linear_state
+  encoding
+  PseudoEffect
   ; ocaml
   unix
   ; global

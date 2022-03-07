@@ -1,0 +1,24 @@
+(executable
+ (name para)
+ (libraries
+  das_helpers
+
+  mtime
+  mtime.clock.os
+
+  sodium
+  distributed-lwt
+ )
+ (flags ("-cclib" "-lsodium"))
+ (modes exe)
+ (preprocess
+  (pps
+   ppx_woo
+  )
+ )
+)
+
+(rule
+ (alias bench)
+ (action (run ./para.exe))
+)

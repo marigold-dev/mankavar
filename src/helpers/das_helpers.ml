@@ -13,6 +13,12 @@ module XBool = struct
   let do_if_true b f = if b then f ()
 end
 
+module XChar = struct
+  let map_int f c =
+    let i = Char.code c in
+    Char.chr ((f i) mod 256)
+end
+
 module XInt64 = struct
   include Int64
   let compare = Int64.compare
@@ -49,11 +55,14 @@ module XFormat = struct
   
   let tuple_2 a b ppf (x , y) =
     Format.fprintf ppf "@[<hov 2>( %a , @; %a )@]" a x b y
+  let pair = tuple_2
 
   let conv f pp ppf x = pp ppf @@ f x
 
   let int64 ppf = Format.fprintf ppf "%Ld"
   let int64' = Fun.flip int64
+  let int ppf = Format.fprintf ppf "%d"
+  let prefix x f ppf = Format.fprintf ppf "%s%a" x f
 end
 
 module Hash : sig
@@ -184,6 +193,22 @@ module XList = struct
       | x :: y :: tl -> if f i x y then aux (i + 1) (y :: tl) else false
     in
     aux 0
+
+  (*
+    Group `lst` in sub lists of `n` elements each.
+    - last sub list is allowed to have less than `n` elements.
+    - no empty sub lists
+    - preserves order
+  *)
+  let group_by n lst =
+    let rec aux i acc_sub acc_all lst = match lst with
+    | [] -> List.rev ((List.rev acc_sub) :: acc_all)
+    | hd :: tl when i mod n = 0 ->
+      aux 1 [] ((List.rev (hd :: acc_sub)) :: acc_all) tl
+    | hd :: tl ->
+      aux (i + 1) (hd :: acc_sub) acc_all tl
+    in
+    aux 1 [] [] lst
 end
 
 module Index = struct
