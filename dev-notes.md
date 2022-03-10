@@ -22,7 +22,7 @@ The main pros are:
 
 In this system, the main bottlenecks are:
 - Synchronization. You need to wait for the Executor to have all the ops before it can start executing them. You need to wait for all the operations before ordering them.
-- Centralization. The system incentivizes having one big Executor. Even if the system is resilient to the Executor trying to pass in bad data, it is not resilient to the Executor getting DOS'd. There will necessarily be a kerkuffle at this point. It would be better if execution was spread among multiple Executors, or if there was an incentive for other people to maintain an Executor (inflation funding to solve crypto challenges that requires having all the online state? norms of changing the executor every month?).
+- Centralization. The system incentivizes having one big Executor. Even if the system is resilient to the Executor trying to pass in bad data, it is not resilient to the Executor getting DDoSed. There will necessarily be a kerkuffle at this point. It would be better if execution was spread among multiple Executors, or if there was an incentive for other people to maintain an Executor (inflation funding to solve crypto challenges that requires having all the online state? norms of changing the executor every month?).
 - Accidents. Because there is a lot of stake on the Executor, it missing but a single bit in the entire execution can be extremely costly.
 
 # Methodology
@@ -56,7 +56,7 @@ More on [its whitepaper](https://tendermint.com/static/docs/tendermint.pdf)
 RUs are a scalability solution for blockchains:
 - All the operations are available (usually, by having them posted on the main chain)
 - Executors execute those operations. And then post commitments to the results of those operations on the mainchain.
-- Validators check that those commitments are correct. If one of the commitment is not correct, validators have a deadline by which they must have submitted a proof they the commitment was incorrect.
+- Validators check that those commitments are correct. If one of the commitment is not correct, validators have a deadline by which they must have submitted a proof that the commitment was incorrect.
 - Past the deadline, we consider the commitments final.
 
 More on [EthHub](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/optimistic_rollups/)
@@ -91,7 +91,7 @@ The main idea behind Plasma was:
 
 The main problems behind Plasma were:
 1. The mass exit problem: what if the operator misrepresents the ownership of **all** the UTXOs? Then everyone should withdraw them. The problem is that the network won't have the bandwidth to allow it, and some will necessarily loose their assets in the process.
-2. The memory ownership problem: each piece of memory belongs to single person. When you only do transactions with UTXOs, it's ok, but this prevents more advanced smart-contracts from taking place. For instance, who should own the state of a Uniswap DEX?
+2. The memory ownership problem: each piece of memory belongs to a single person. When you only do transactions with UTXOs, it's ok, but this prevents more advanced smart-contracts from taking place. For instance, who should own the state of a Uniswap DEX?
 
 If you think about it, ORUs solve both those problems: basically, everyone is responsible for all the space.
 
