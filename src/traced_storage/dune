@@ -1,0 +1,14 @@
+(library
+ (name tezos_traced_storage)
+ (libraries
+  das_helpers
+ )
+ (preprocess
+  (pps
+   ppx_woo
+  )
+ )
+ (instrumentation
+  (backend bisect_ppx)
+ )
+)

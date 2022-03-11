@@ -1,9 +1,0 @@
-(test
- (name das_oru_tests)
- (libraries
-  das_oru
-
-  ; global
-  alcotest
- )
-)

@@ -31,9 +31,11 @@ module XInt64 = struct
 end
 
 module XBytes = struct
-  let pp_char ppf c = Format.fprintf ppf "%x" @@ Char.code c
+  let pp_char ppf c = Format.fprintf ppf "%02x" @@ Char.code c
   let pp ppf b =
     Bytes.iter (pp_char ppf) b
+  let pp_hex ppf b =
+    Format.fprintf ppf "0x%a" pp b
 end
 
 module XFormat = struct

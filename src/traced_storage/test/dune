@@ -1,0 +1,10 @@
+(test
+ (name tezos_traced_storage_test)
+ (libraries
+  tezos_traced_storage
+  tezos_traced_storage_programs
+
+  alcotest
+  qcheck-alcotest
+ )
+)

@@ -1,0 +1,12 @@
+(executable
+ (name benchmark)
+ (libraries
+  tezos_traced_storage
+  tezos_traced_storage_programs
+  tezos-hacl-glue-unix))
+
+(rule
+ (alias bench)
+ (action
+  (progn
+   (run %{exe:benchmark.exe}))))
