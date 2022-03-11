@@ -1,0 +1,16 @@
+(library
+ (name oru_virtual)
+ (virtual_modules
+  oru_param
+ )
+ (libraries
+  das_helpers
+  das_vm
+ )
+ (preprocess
+  (pps
+   ppx_woo
+   ppx_deriving.ord
+  )
+ )
+)

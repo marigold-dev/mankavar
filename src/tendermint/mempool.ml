@@ -2,7 +2,11 @@ open Das_helpers
 
 let do_hash : bytes -> bytes = Crypto.blake2b
 
-module Op = Transition.Operation
+module Op = struct
+  include Transition.Operation
+  let do_hash' x = Encoding.to_bytes encoding x |> do_hash
+  let do_hash = Hash.make do_hash'
+end
 type op = Op.t
 let do_op_hash = Op.do_hash
 

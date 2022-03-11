@@ -3,6 +3,7 @@ module type S = sig
   val to_list : 'a t -> (key * 'a) list
   val of_list : (key * 'a) list -> 'a t
   val encoding : key Encoding.t -> 'a Encoding.t -> 'a t Encoding.t
+  val update' : key -> ('a -> 'a) -> 'a t -> 'a t
 end
 module Make(P : Map.OrderedType) : S with type key = P.t = struct
   include Map.Make(P)
@@ -15,6 +16,8 @@ module Make(P : Map.OrderedType) : S with type key = P.t = struct
     lst
     |> List.to_seq
     |> of_seq
+
+  let update' k f = update k (function None -> None | Some x -> Some (f x))
   
   let encoding k e = Encoding.(
     conv of_list to_list @@

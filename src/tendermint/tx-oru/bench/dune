@@ -1,0 +1,13 @@
+(executable
+ (name das_tendermint_srce_bench)
+ (libraries
+  das_tendermint_scre
+
+  mtime
+  mtime.clock.os
+ )
+)
+
+(rule
+ (alias bench)
+ (action (run ./das_tendermint_srce_bench.exe)))

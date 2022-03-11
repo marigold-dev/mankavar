@@ -1,0 +1,9 @@
+(test
+ (name oru_test)
+ (libraries
+  oru_dummy
+  oru_dummy_raw
+
+  alcotest
+ ) 
+)

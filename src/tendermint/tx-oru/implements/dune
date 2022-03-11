@@ -1,0 +1,7 @@
+(library
+ (name das_tendermint_oru_dummy)
+ (implements das_tendermint)
+ (libraries
+  oru_dummy
+ )
+)

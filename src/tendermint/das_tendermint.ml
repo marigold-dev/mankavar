@@ -460,7 +460,7 @@ module RawTendermintNode = struct
     let t = t |> set_lock None in
     let t = t |> map_mempool @@ (fun m ->
     Transition.Bunch.to_list (Block.operations b) |> List.fold_left (fun m op ->
-      let oph = Transition.Operation.do_hash op in
+      let oph = Mempool.Op.do_hash op in
       Mempool.remove oph m
     ) m )
     in

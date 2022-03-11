@@ -63,6 +63,8 @@ module XFormat = struct
   let int64' = Fun.flip int64
   let int ppf = Format.fprintf ppf "%d"
   let prefix x f ppf = Format.fprintf ppf "%s%a" x f
+  let cst x ppf _ = Format.fprintf ppf "%s" x
+  let cst' x y z = cst x z y
 end
 
 module Hash : sig
@@ -166,6 +168,14 @@ module XList = struct
     in
     aux
 
+  let nth_map f n lst =
+    let rec aux acc i lst = match lst with
+    | [] -> assert false
+    | hd :: tl when i = 0 -> (List.rev acc) @ (f hd :: tl)
+    | hd :: tl -> aux (hd :: acc) (i - 1) tl
+    in
+    aux [] n lst
+
   (*
     Find following elements matching a predicate
     find_follow (fun a b -> b - a = 4) [ 1 ; 2 ; 4 ; 8 ; 16 ] = Some (4 , 8)
@@ -219,7 +229,10 @@ module Index = struct
 
     let of_int32 = height
     let to_int32 = get_height_exn
+    let to_int x = x |> to_int32 |> Int32.to_int
+    let of_int x = x |> Int32.of_int |> of_int32
     let map_int32 f x = of_int32 @@ f @@ to_int32 x
+    let map_int f x = of_int @@ f @@ to_int x
     let compare : t -> t -> int = fun x y ->
       Int32.compare (to_int32 x) (to_int32 y)
     let equal a b = compare a b = 0
@@ -243,7 +256,10 @@ module Index = struct
     type t
     val of_int32 : int32 -> t
     val to_int32 : t -> int32
+    val to_int : t -> int
+    val of_int : int -> t
     val map_int32 : (int32 -> int32) -> t -> t
+    val map_int : (int -> int) -> t -> t
     val compare : t -> t -> int
     val equal : t -> t -> bool
     val zero : t

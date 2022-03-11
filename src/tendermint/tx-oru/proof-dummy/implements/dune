@@ -1,0 +1,7 @@
+(library
+ (name oru_dummy)
+ (libraries
+  oru_dummy_raw
+ )
+ (implements oru_virtual)
+)

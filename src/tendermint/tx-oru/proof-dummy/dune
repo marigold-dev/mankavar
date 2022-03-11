@@ -1,0 +1,11 @@
+(library
+ (name oru_dummy_raw)
+ (libraries
+  das_helpers
+ )
+ (preprocess
+  (pps
+   ppx_woo
+  )
+ )
+)

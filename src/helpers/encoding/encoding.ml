@@ -1,6 +1,7 @@
 (* Not serialiable!! *)
 type 'a t =
 | Unit : unit t
+| Char : char t
 | Int32 : int32 t
 | Int64 : int64 t
 | String : string t
@@ -18,6 +19,7 @@ let case forth back x = Case (forth , back , x)
 let case_tpl (forth , back , x) = case forth back x
 let union lst = Union lst
 let unit = Unit
+let char = Char
 let int32 = Int32
 let int64 = Int64
 let string = String
@@ -39,15 +41,19 @@ let option a = union [
   case (fun x -> x) Option.some a ;
   case (function Some _ -> None | None -> Some ()) (fun () -> None) unit ;
 ]
+let int_s8 = conv Char.code Char.chr char
+let bool = conv (fun c -> c = '\000') (fun b -> if b then '\001' else '\000') char
 let dummy default = conv (fun () -> default) (fun _ -> ()) unit
 
 module Size = struct
+  let char = 1
   let int32 = 4
   let int64 = 8
   let small_int = int32
   let rec main : type a . a t -> a -> int = fun e ->
     match e with
     | Unit -> fun () -> 0
+    | Char -> fun _ -> char
     | Int32 -> fun _ -> int32
     | Int64 -> fun _ -> int64
     | String -> fun s -> small_int + String.length s
@@ -105,6 +111,7 @@ module To_bytes = struct
       let self = aux in
       match e , x with
       | Unit , () -> ()
+      | Char , c -> of_char c
       | Int32 , n -> of_int32 n
       | Int64 , n -> of_int64 n
       | String , s ->
@@ -158,53 +165,6 @@ module To_bytes = struct
     aux e x ;
     bytes
 
-  (* let rec main : type a . a t -> a -> bytes = fun e ->
-    let self = main in
-    match e with
-    | Unit -> fun () -> Bytes.empty
-    | Int32 -> fun i -> (
-      of_int32 i
-    )
-    | Int64 -> fun i -> (
-      of_int64 i
-    )
-    | String -> fun s -> (
-      Bytes.cat
-        (of_int @@ String.length s)
-        (Bytes.of_string s)
-    )
-    | Bytes -> fun b ->
-      Bytes.cat (of_int @@ Bytes.length b) b
-    | Union lst -> fun x -> (
-      PseudoEffect.returner @@ fun { return } ->
-      List.iteri (fun i (Case (forth , _back , a)) ->
-        match forth x with
-        | Some x' -> return (
-          Bytes.cat (of_int i) (self a x')
-        ) 
-        | None -> ()
-      ) lst ;
-      failwith "no matching case in variant"
-    )
-    | Tuple_2 (a , b) -> fun (x , y) -> (
-      Bytes.cat (self a x) (self b y)
-    )
-    | Tuple_3 (a , b , c) -> fun (x , y , z) -> (
-      Bytes.cat (self a x) @@ Bytes.cat (self b y) (self c z)
-    )
-    | Tuple_4 (a , b , c , d) -> fun (x , y , z , w) -> (
-      Bytes.cat (self a x) @@ Bytes.cat (self b y)
-        @@ Bytes.cat (self c z) (self d w)
-    )
-    | Tuple_5 (a , b , c , d , e) -> fun (x1 , x2 , x3 , x4 , x5) -> (
-      Bytes.cat (self a x1) @@ Bytes.cat (self b x2)
-        @@ Bytes.cat (self c x3) @@ Bytes.cat (self d x4) (self e x5)
-    )
-    | List a -> fun lst -> (
-      Bytes.cat (of_int @@ List.length lst) @@
-      Bytes.concat Bytes.empty @@ List.map (self a) lst
-    )
-    | Conv (_forth , back , a) -> fun x -> self a @@ back x *)
 end
 
 module Of_bytes = struct
@@ -220,10 +180,15 @@ module Of_bytes = struct
       shift 8 ;
       Bytes.get_int64_be b (!i - 8)
     in
+    let get_char () =
+      shift 1 ;
+      Bytes.get b (!i - 1)
+    in
     let get_small_int () = get_int32 () |> Int32.to_int in
     let rec aux : type a . a t -> a = fun a ->
     match a with
     | Unit -> ()
+    | Char -> get_char ()
     | Int32 -> get_int32 ()
     | Int64 -> get_int64 ()
     | String -> (

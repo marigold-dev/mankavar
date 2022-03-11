@@ -8,8 +8,8 @@ module Operation : sig
   val get_max_gas : t -> int64
   val encoding : t Encoding.t
   val pp : Format.formatter -> t -> unit
-  val do_hash : t -> t Hash.t
-  val do_hash' : t -> Hash'.t
+  (* val do_hash : t -> t Hash.t
+  val do_hash' : t -> Hash'.t *)
 end
 
 module Bunch : sig
