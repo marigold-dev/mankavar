@@ -25,8 +25,8 @@
 (*****************************************************************************)
 
 open Util
-open Tezos_traced_storage.Sparse
-open Tezos_traced_storage_programs
+open Traced_storage.Sparse
+open Traced_storage_programs
 
 (* let print_trace stream =
   Format.printf "Trace\n" ;

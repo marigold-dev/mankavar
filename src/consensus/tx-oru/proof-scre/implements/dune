@@ -1,0 +1,7 @@
+(library
+ (name oru_scre)
+ (libraries
+  oru_scre_raw
+ )
+ (implements oru_virtual)
+)

@@ -1,14 +1,15 @@
 (library
- (name traced_storage)
+ (name oru_scre_raw)
  (libraries
   das_helpers
+  das_vm
+
+  traced_storage
  )
  (preprocess
   (pps
    ppx_woo
+   ppx_deriving.ord
   )
- )
- (instrumentation
-  (backend bisect_ppx)
  )
 )

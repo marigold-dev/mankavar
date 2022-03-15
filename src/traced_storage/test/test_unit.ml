@@ -25,9 +25,9 @@
 (*****************************************************************************)
 
 open Util
-open Tezos_traced_storage.Sparse
+open Traced_storage.Sparse
 
-module THash = Tezos_traced_storage.Traced_hash
+module THash = Traced_storage.Traced_hash
 
 module Patricia_unit = struct
   open Patricia

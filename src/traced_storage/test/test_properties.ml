@@ -24,9 +24,9 @@
 (*                                                                           *)
 (*****************************************************************************)
 
-open Tezos_traced_storage.Sparse
-open Tezos_traced_storage_programs
-open Tezos_traced_storage_programs.Generators
+open Traced_storage.Sparse
+open Traced_storage_programs
+open Traced_storage_programs.Generators
 
 module Common_tests
     (S : COMMON) (G : sig

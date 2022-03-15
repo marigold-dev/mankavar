@@ -25,7 +25,7 @@
 (*****************************************************************************)
 
 open Util
-open Tezos_traced_storage.Sparse
+open Traced_storage.Sparse
 
 let bug_regression_a =
   test "bug-regression-a" @@ fun () ->

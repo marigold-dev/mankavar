@@ -242,5 +242,14 @@ module Of_bytes = struct
 
 end
 
+module To_bits = struct
+  let main e x : Bits.t =
+    To_bytes.main e x
+    |> Bytes.to_seq |> List.of_seq
+    |> List.map Bits.of_char
+    |> List.concat
+end
+
 let to_bytes = To_bytes.main
 let of_bytes = Of_bytes.main
+let to_bits = To_bits.main

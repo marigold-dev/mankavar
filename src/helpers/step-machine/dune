@@ -1,7 +1,6 @@
 (library
- (name encoding)
+ (name step_machine)
  (libraries
-  bits
   PseudoEffect
  )
 )

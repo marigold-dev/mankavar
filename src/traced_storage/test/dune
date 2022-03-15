@@ -1,8 +1,8 @@
 (test
- (name tezos_traced_storage_test)
+ (name traced_storage_test)
  (libraries
-  tezos_traced_storage
-  tezos_traced_storage_programs
+  traced_storage
+  traced_storage_programs
 
   alcotest
   qcheck-alcotest

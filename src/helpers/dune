@@ -5,6 +5,7 @@
   linear_state
   encoding
   PseudoEffect
+  step_machine
   ; ocaml
   unix
   ; global

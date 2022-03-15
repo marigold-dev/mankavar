@@ -24,10 +24,10 @@
 (*                                                                           *)
 (*****************************************************************************)
 
-open Tezos_traced_storage.Sparse
+open Traced_storage.Sparse
 open Types
 
-let leaf content : Tree.t = Leaf {content; hash = Tezos_traced_storage.Traced_hash.do_hash content}
+let leaf content : Tree.t = Leaf {content; hash = Traced_storage.Traced_hash.do_hash content}
 
 let node l r : Tree.t = Node {left = l; right = r; hash = Tree.lr_hash l r}
 

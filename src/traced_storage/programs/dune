@@ -1,5 +1,5 @@
 (library
- (name tezos_traced_storage_programs)
- (libraries tezos_traced_storage qcheck-core)
+ (name traced_storage_programs)
+ (libraries traced_storage qcheck-core)
  (instrumentation
   (backend bisect_ppx)))

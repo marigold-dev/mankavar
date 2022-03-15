@@ -2,68 +2,12 @@
 
 open Das_helpers
 open Oru_param
+open Structs
 
-module HMap = struct
-  include XMap.Make(Height)
-  let encoding x = encoding Height.encoding x
-end
+module Bunch = Bunch
+module Operation = Operation
 
-module BatchIndex = Index.Make()
-module BMap = struct
-  include XMap.Make(BatchIndex)
-  let encoding x = encoding BatchIndex.encoding x
-end
-
-module Commitment = struct
-
-  module Infra = struct
-    type t = Hash'.t 
-    let encoding : t Encoding.t = Hash'.encoding
-  end
-  type infra = Infra.t
-  module Content = struct
-    module HashIndex = Index.Make()
-    type t = {
-      previous_hash : Hash'.t ;
-      hashes : infra list ;
-    }
-    [@@deriving ez]
-    let encoding =
-      let open Encoding in
-      conv make_tpl' destruct @@ tuple_2
-        Hash'.encoding (list Infra.encoding)
-    let get_hash i t =
-      let i = HashIndex.to_int i in
-      if i = -1
-      then t.previous_hash
-      else List.nth t.hashes i
-  end
-  type t = {
-    height : Height.t ;
-    batch : BatchIndex.t ;
-    content : Content.t ;
-  }
-  [@@deriving ez]
-  let encoding : t Encoding.t =
-    let open Encoding in
-    conv make_tpl' destruct @@ tuple_3
-      Height.encoding BatchIndex.encoding Content.encoding
-end
-module BatchCommitments = struct
-  (* content * is_valid *)
-  type t = (Commitment.content * bool) list
-  let encoding : t Encoding.t =
-    let open Encoding in
-    list (tuple_2 Commitment.Content.encoding bool)
-  let append x (t : t) : t = t @ [x , true]
-  module Index = Index.Make()
-  let get_valid i (t : t) =
-    let (c , v) = Index.to_int i |> List.nth t in
-    assert v ;
-    c
-  let set_invalid i (t : t) : t =
-    XList.nth_map (fun (c , _) -> (c , false)) (Index.to_int i) t
-end
+let c_STEPS_PER_COMMIT = 10_000L
 
 module State = struct
 
@@ -115,58 +59,9 @@ module State = struct
     let remove_height = HMap.update' h remove_batches in
     let remove_commitments = map_commitments remove_height in
     remove_commitments t
-
-end
-
-
-module Rejection = struct
-  type t = {
-    height : Height.t ;
-    batch : BatchIndex.t ;
-    batch_commitment : BatchCommitments.Index.t ;
-    first_bad_hash : Commitment.Content.HashIndex.t ;
-    proof : Proof.t ;
-  }
-  [@@deriving ez]
-  let encoding =
-  let open Encoding in
-  conv make_tpl' destruct @@ tuple_5
-    Height.encoding BatchIndex.encoding BatchCommitments.Index.encoding
-    Commitment.Content.HashIndex.encoding Proof.encoding
-
-end
-
-module Operation = struct
-  type t =
-  | Submit_batch of Batch.t
-  | Commit of Commitment.t
-  | Reject of Rejection.t
-  [@@deriving ez]
-
-  let get_max_gas = fun _ -> 1L
-  let pp ppf t =
-    destruct_tpl
-      (XFormat.cst' "submit batch")
-      (XFormat.cst' "commit")
-      (XFormat.cst' "reject")
-    t ppf
-
-  let encoding =
-    let open Encoding in
-    union [
-      case get_submit_batch_opt submit_batch Batch.encoding ;
-      case get_commit_opt commit Commitment.encoding ;
-      case get_reject_opt reject Rejection.encoding ;
-    ]
-end
-
-module Bunch = struct
-  type t = Operation.t list
-  let make lst = lst
-  let to_list lst = lst
-  let encoding = Encoding.list Operation.encoding
-  let dummy = []
-  let max_gas = 1L
+  let batch_get h b t =
+    let b' = BatchIndex.to_int b in
+    t |> batches |> HMap.find h |> fun lst -> List.nth lst b'
 end
 
 type do_operation_result = {
@@ -190,12 +85,34 @@ let reject : Rejection.t -> State.t -> do_operation_result = fun r t ->
   let first_bad_commitment = State.commitment_get h b bc t in
   let first_bad_hash =
     Commitment.Content.get_hash hash_i first_bad_commitment in
-  let last_ok_hash =
-    Commitment.Content.get_hash
-      (Commitment.Content.HashIndex.map_int (fun i -> i - 1) hash_i)
-      first_bad_commitment
+  let batch = State.batch_get h b t in
+  let last_hash_i , last_nb_steps =
+    let nb_steps = Batch.get_nb_steps batch in
+    let nb_hashes = Int64.(succ @@ div nb_steps c_STEPS_PER_COMMIT) in
+    Commitment.Content.HashIndex.of_int32 @@ Int64.to_int32 nb_hashes ,
+    Int64.rem nb_steps c_STEPS_PER_COMMIT
   in
-  let replayed_hash = Proof.replay proof last_ok_hash in
+  let replayed_hash =
+    if Commitment.Content.HashIndex.(equal zero hash_i) then (
+      let prev_hash =
+        Commitment.Content.get_previous_hash first_bad_commitment in
+      Proof.replay_start proof batch prev_hash
+    ) else if Commitment.Content.HashIndex.(equal last_hash_i hash_i) then (
+      let prev_hash =
+        Commitment.Content.get_hash
+          (Commitment.Content.HashIndex.map_int Int.pred hash_i)
+          first_bad_commitment
+      in
+      Proof.replay_finish proof prev_hash ~nb_steps:last_nb_steps
+    ) else (
+      let prev_hash =
+        Commitment.Content.get_hash
+          (Commitment.Content.HashIndex.map_int Int.pred hash_i)
+          first_bad_commitment
+      in
+      Proof.replay proof prev_hash ~nb_steps:c_STEPS_PER_COMMIT
+    )
+  in
   assert (first_bad_hash <> replayed_hash) ;
   t
   |> State.commitment_remove h b bc

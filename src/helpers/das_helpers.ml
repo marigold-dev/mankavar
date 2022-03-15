@@ -5,6 +5,7 @@ module XOption = XOption
 module Linear_state = Linear_state
 module Bimap = Bimap
 module XMap = XMap
+module Bits = Bits
 
 let tuple2 x y = (x , y)
 let tuple3 x y z = (x , y, z)
@@ -13,16 +14,27 @@ module XBool = struct
   let do_if_true b f = if b then f ()
 end
 
+module XResult = struct
+  let value' on_error = function
+  | Ok x -> x
+  | Error e -> on_error e
+end
+
 module XChar = struct
   let map_int f c =
     let i = Char.code c in
     Char.chr ((f i) mod 256)
 end
-
+module XUnit = struct
+  type t = unit
+  let encoding = Encoding.unit
+  let of_bytes = Encoding.of_bytes encoding
+end
 module XInt64 = struct
   include Int64
   let compare = Int64.compare
   let encoding = Encoding.int64
+  let to_bits = Encoding.to_bits encoding
   let pp' = Format.dprintf "%Ld"
   let pp = Fun.flip pp'
   let (<) (a : Int64.t) b = a < b
@@ -37,6 +49,7 @@ module XBytes = struct
   let pp_hex ppf b =
     Format.fprintf ppf "0x%a" pp b
 end
+
 
 module XFormat = struct
   let array f ppf xs =

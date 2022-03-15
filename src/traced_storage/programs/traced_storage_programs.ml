@@ -24,7 +24,7 @@
 (*                                                                           *)
 (*****************************************************************************)
 
-open Tezos_traced_storage.Sparse
+open Traced_storage.Sparse
 include Types
 module Generators = Generators
 
