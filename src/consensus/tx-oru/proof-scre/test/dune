@@ -2,5 +2,7 @@
  (name test)
  (libraries
   oru_scre_raw
+
+  alcotest
  )
 )

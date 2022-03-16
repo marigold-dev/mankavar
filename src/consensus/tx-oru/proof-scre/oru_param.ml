@@ -1,11 +1,12 @@
 open Das_helpers
+open Utils
 
 module Batch = struct
-  type t = Scre.Operation.t list
+  type t = Operation.t list
   let encoding : t Encoding.t = assert false
   let get_nb_steps (t : t) =
     t
-    |> List.map Scre.Operation.get_max_gas
+    |> List.map Operation.get_max_gas
     |> List.fold_left Int64.add 0L
 end
 

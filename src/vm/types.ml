@@ -65,7 +65,8 @@ let op2_encoding = Encoding.(
 type 'ct instruction =
 | Jump_value of value
 | Jump of register
-| JumpGez of register * register (* if greater x1, jump to x2 *)
+| JumpGz of register * register (* if x1>0, jump to x2 *)
+| JumpLez of register * register (* if x1<=0, jump to x2 *)
 | Stack_push of register (* Stack.push r *)
 | Stack_get of int * register (* r <- stack[i] *)
 | Stack_set of int * register (* stack[i] <- r *)
@@ -88,11 +89,12 @@ let instruction_pp ~compile_time ppf x =
   instruction_destruct
   ~jump_value:(print "jmp to %a" vpp)
   ~jump:(print "jmp to %a" rpp)
-  ~jumpgez:(fun r1 r2 -> print "jmp>%a to %a" rpp r1 rpp r2)
+  ~jumpgz:(fun r1 r2 -> print "jmp%a>0 to %a" rpp r1 rpp r2)
+  ~jumplez:(fun r1 r2 -> print "jmp%a<=0 to %a" rpp r1 rpp r2)
   ~stack_push:(print "stack push %a" rpp)
   ~stack_get:(fun i r -> print "stack[%d] -> %a" i rpp r)
   ~stack_set:(fun i r -> print "stack[%d] <- %a" i rpp r)
-  ~stack_drop:(print "stack[0:%d] drop")
+  ~stack_drop:(print "stack[1:%d] drop")
   ~register_set_value:(fun r v -> print "%a <- %a" rpp r vpp v)
   ~register_set:(fun r1 r2 -> print "%a <- %a" rpp r1 rpp r2)
   ~call_op1:(fun op r1 r2 -> print "%a <- %a %a" rpp r1 o1pp op rpp r2)
@@ -101,10 +103,20 @@ let instruction_pp ~compile_time ppf x =
   )
   ~halt:(print "halt")
   ~custom:(fun i -> print "custom %d" i)
-  ~compile_time
+  ~compile_time:(print "%a" compile_time)
   x ppf
 
 type empty = |
+
+let program_pp ~compile_time ppf x =
+  let print x = Format.fprintf ppf x in
+  print "@[<v>" ;
+  x |> List.iteri (fun i instr -> (
+    print "%d:\t%a" i (instruction_pp ~compile_time) instr ;
+    print "@;" ;
+  )) ;
+  print "@]" ;
+  ()
 
 (*
   Runtime instructions don't have compile_time case
@@ -112,8 +124,12 @@ type empty = |
 type rt_instruction = empty instruction
 
 let rt_instruction_pp : _ -> rt_instruction -> _ =
-  let compile_time : empty -> _ = function _ -> . in
+  let compile_time : _ -> empty -> _ = fun _ -> function _ -> . in
   instruction_pp ~compile_time
+
+let rt_program_pp =
+  let compile_time : _ -> empty -> _ = fun _ -> function _ -> . in
+  program_pp ~compile_time
 
 let rt_instruction_encoding : rt_instruction Encoding.t = Encoding.(
   let renc = register_encoding in
@@ -122,7 +138,8 @@ let rt_instruction_encoding : rt_instruction Encoding.t = Encoding.(
   union [
     case get_jump_value_opt jump_value int64 ;
     case get_jump_opt jump renc ;
-    case get_jumpgez_opt jumpgez' @@ tuple_2 renc renc ;
+    case get_jumpgz_opt jumpgz' @@ tuple_2 renc renc ;
+    case get_jumplez_opt jumplez' @@ tuple_2 renc renc ;
     case get_stack_push_opt stack_push renc ;
     case get_stack_get_opt stack_get' @@ tuple_2 int renc ;
     case get_stack_set_opt stack_set' @@ tuple_2 int renc ;
@@ -146,6 +163,7 @@ type 'mem state = {
   mutable memory : 'mem ;
   stack : stack ;
 }
+
 let state_pp f ppf s =
   let {
     instructions ; instruction_pointer = ip ;

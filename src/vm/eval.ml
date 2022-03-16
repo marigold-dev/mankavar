@@ -46,8 +46,13 @@ let step custom : _ state -> continue = fun s ->
   match Array.get s.instructions (s.instruction_pointer |> Int64.to_int)  with
   | Jump r -> goto s (get_register s r) ; Continue
   | Jump_value v -> goto s v ; Continue
-  | JumpGez (r1 , r2) -> (
-    if Value.gez (get_register s r1)
+  | JumpGz (r1 , r2) -> (
+    if Value.gz (get_register s r1)
+    then (goto s (get_register s r2) ; Continue)
+    else (next s ; Continue)
+  )
+  | JumpLez (r1 , r2) -> (
+    if Value.lez (get_register s r1)
     then (goto s (get_register s r2) ; Continue)
     else (next s ; Continue)
   )

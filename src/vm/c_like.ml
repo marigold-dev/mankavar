@@ -1,3 +1,4 @@
+[@@@warning "-34"]
 type variable = string
 
 type op1 = Not
@@ -24,21 +25,29 @@ type expression =
 type statement =
 | Do of expression
 | Declaration of variable * expression
+| Assignment of variable * expression
+| Loop_gz of expression * block
 | Return of expression
 [@@deriving ez]
 
+and block = statement list
+
 type function_ = {
-  variable : variable ;
-  body : statement list ;
+  name : string ;
+  input : variable ;
+  body : block ;
 }
 [@@deriving ez]
 
 type program = function_ list
 
 let add x y = call_op2 Op2.Add x y
+let sub x y = call_op2 Op2.Sub x y
+
+let function_ = function__make_tpl
 
 let expression_to_program e = [
-  function__make_tpl "main" [
+  function__make_tpl "main" "_" [
     return e ;
   ]
 ]

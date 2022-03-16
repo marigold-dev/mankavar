@@ -3,7 +3,8 @@ open Das_helpers
 module Value = struct
   type t = int64
   let succ = Int64.succ
-  let gez x = Int64.compare x Int64.zero >= 0
+  let gz x = Int64.compare x Int64.zero > 0
+  let lez x = Int64.compare x Int64.zero <= 0
   let add = Int64.add
   let sub = Int64.sub
   let mul = Int64.mul
@@ -51,14 +52,13 @@ module Stack = struct
   let pp ppf s =
     let print x = Format.fprintf ppf x in
     let { content ; position } = s in
-    print "@[" ;
-    for i = 0 to position do
-      print "%a" Value.pp content.(i) ;
-      if i mod 10 = 0 then (
+    print "@[[" ;
+    for i = 1 to position do
+      if i mod 10 = 0 || i = 1 then (
         print "(%d)" i ;
       ) ;
-      print "@," ;
+      print "%a   " Value.pp content.(i) ;
     done ;
-    print "@]" ;
+    print "]@]" ;
     ()
 end
