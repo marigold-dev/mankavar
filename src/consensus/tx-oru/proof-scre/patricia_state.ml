@@ -28,6 +28,7 @@ let path_of_bits path = (module struct let path = path end : PATH)
 module type KVH = sig
   val get : Bits.t -> Bytes.t option
   val set : Bits.t -> Bytes.t -> unit
+  val mem : Bits.t -> bool
   val get_hash : unit -> Hash'.t
 end
 
@@ -62,61 +63,82 @@ module CI = struct
     tuple_2 Contract_index.encoding XInt64.encoding
 end
 
-module STATE_of_KVH(KVH : KVH) : STATE = struct
-  let do_hash () = KVH.get_hash ()
+module STATE_of_KVH(KVH : KVH) = struct
+  module Raw = struct
+    let do_hash () = KVH.get_hash ()
+    module Ledger = SMap
+      (val path_of_bits[false ; false ; false])
+      (Account_index)(Balance)(KVH)
 
-  module Ledger = SMap
-    (val path_of_bits[false ; false ; false])
-    (Account_index)(Balance)(KVH)
+    module Contracts = SMap
+      (val path_of_bits[false ; false ; true])
+      (Contract_index)(Contract)(KVH)
 
-  module Contracts = SMap
-    (val path_of_bits[false ; false ; true])
-    (Contract_index)(Contract)(KVH)
+    module Next_key_index = struct
+      module Raw = SConstant
+        (val path_of_bits[false ; true ; false])
+        (Key_index)(KVH)
+      open Raw
+      let get () = get () |> Option.get
+      let increment () =
+        get () |> Int64.succ |> set
+      let get_next () = increment () |> get
+      let init () = set 0L
+    end
 
-  module Next_account_index = SConstant
-    (val path_of_bits[false ; true ; false])
-    (Account_index)(KVH)
+    module Next_contract_index = struct
+      module Raw = SConstant
+        (val path_of_bits[false ; true ; true])
+        (Contract_index)(KVH)
+      open Raw
+      let get () = get () |> Option.get
+      let increment () =
+        get () |> Int64.succ |> set
+      let get_next () = increment () |> get
+      let init () = set 0L
+    end
 
-  module Next_contract_index = struct
-    open SConstant
-      (val path_of_bits[false ; true ; true])
-      (Contract_index)(KVH)
-    let get () = get () |> Option.get
-    let increment () =
-      get () |> Int64.succ |> set
-    let get_next () = increment () |> get
-  end
+    module Memory = SMap
+      (val path_of_bits[true ; false ; false])
+      (CI)(XInt64)(KVH)
 
-  module Memory = SMap
-    (val path_of_bits[true ; false ; false])
-    (CI)(XInt64)(KVH)
+    let get_balance = Ledger.get
+    let set_balance = Ledger.set
+    let init_key amount =
+      let new_index = Next_key_index.get_next () in
+      Ledger.set (Account_index.key_index new_index) amount ;
+      new_index
 
-  let get_balance = Ledger.get
-  let set_balance = Ledger.set
-  let get_contract_exn x = Contracts.get x |> Option.get
-  let set_contract_exn k v =
-    ignore @@ get_contract_exn k ;
-    Contracts.set k v
-  let init_contract c =
-    let new_index = Next_contract_index.get_next () in
-    set_contract_exn new_index c ;
-    new_index
-  let credit src amount =
-    let src_balance = Option.get @@ get_balance src in
-    let src_balance' = Int64.add src_balance amount in
-    set_balance src src_balance' ;
-    ()
-  let debit src amount =
-    let src_balance = Option.get @@ get_balance src in
-    if Int64.compare src_balance amount < 0 then (
-      Error ()
-    ) else (
-      let src_balance' = Int64.sub src_balance amount in
+    let get_contract_exn x = Contracts.get x |> Option.get
+    let set_contract_exn k v =
+      ignore @@ get_contract_exn k ;
+      Contracts.set k v
+    let init_contract c =
+      let new_index = Next_contract_index.get_next () in
+      set_contract_exn new_index c ;
+      new_index
+    let credit src amount =
+      let src_balance = Option.get @@ get_balance src in
+      let src_balance' = Int64.add src_balance amount in
       set_balance src src_balance' ;
-      Ok ()
-    )
-  let read_slow c k = Memory.get (c , k) |> Option.get
-  let write_slow c k v = Memory.set (c , k) v
+      ()
+    let debit src amount =
+      let src_balance = Option.get @@ get_balance src in
+      if Int64.compare src_balance amount < 0 then (
+        Error ()
+      ) else (
+        let src_balance' = Int64.sub src_balance amount in
+        set_balance src src_balance' ;
+        Ok ()
+      )
+    let read_slow c k = Memory.get (c , k) |> Option.get
+    let write_slow c k v = Memory.set (c , k) v
+    let init () =
+      Next_key_index.init () ;
+      Next_contract_index.init () ;
+      ()
+  end
+  include (Raw : STATE)
 end
 
 module type PARAMETER = sig
@@ -128,6 +150,7 @@ module Make(P : PARAMETER) = struct
     let r = ref P.init
     module KVH = struct
       let get k = Patricia.get_opt !r k |> snd
+      let mem k = Patricia.mem !r k |> snd
       let set k v = r := Patricia.set !r k v
       let get_hash () = Patricia.get_hash !r
     end
@@ -135,6 +158,7 @@ module Make(P : PARAMETER) = struct
   end
   include (Raw : STATE)
 end
+module type MAKE_RETURN = module type of Make(val Obj.magic () : PARAMETER)
 
 module type CONSUME_PARAMETER = sig
   val root : Hash'.t
@@ -157,6 +181,13 @@ module ConsumeMake(P : CONSUME_PARAMETER) = struct
         tree := tree' ;
         stream := stream' ;
         ()
+      let mem k =
+        let ((tree' , stream') , b) =
+          Patricia_consume.mem (!tree , !stream) k in
+        tree := tree' ;
+        stream := stream' ;
+        b
+        
       let get_hash () = Patricia_consume.get_hash (!tree , !stream)
     end
     include STATE_of_KVH(KVH)

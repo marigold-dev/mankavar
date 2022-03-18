@@ -25,6 +25,8 @@ module Account_index = struct
   let pp = Fun.flip @@ destruct_tpl XFormat.int64' Contract_index.pp'
 end
 
+let account_key x = Account_index.Key_index x
+
 
 type memory = Value.t VMap.t
 let memory_encoding = Das_helpers.Encoding.(
@@ -146,11 +148,13 @@ module type STATE = sig
   val get_balance : Account_index.t -> int64 option
   val credit : Account_index.t -> int64 -> unit
   val debit : Account_index.t -> int64 -> (unit , unit) result
+  val init_key : int64 -> Key_index.t
   val get_contract_exn : Contract_index.t -> Contract.t
   val set_contract_exn : Contract_index.t -> Contract.t -> unit
   val init_contract : Contract.t -> Contract_index.t
   val read_slow : Contract_index.t -> int64 -> int64
   val write_slow : Contract_index.t -> int64 -> int64 -> unit
+  val init : unit -> unit
 end
 
 module Destination = struct

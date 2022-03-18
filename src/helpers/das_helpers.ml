@@ -19,7 +19,9 @@ module XResult = struct
   | Ok x -> x
   | Error e -> on_error e
 end
-
+module XArray = struct
+  let empty () = Array.make 0 (Obj.magic ()) 
+end
 module XChar = struct
   let map_int f c =
     let i = Char.code c in
