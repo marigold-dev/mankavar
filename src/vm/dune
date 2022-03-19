@@ -6,6 +6,7 @@
  (preprocess
   (pps
    ppx_woo
+   ppx_deriving.eq
   )
  )
 )

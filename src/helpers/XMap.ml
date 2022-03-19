@@ -4,6 +4,7 @@ module type S = sig
   val of_list : (key * 'a) list -> 'a t
   val encoding : key Encoding.t -> 'a Encoding.t -> 'a t Encoding.t
   val update' : key -> ('a -> 'a) -> 'a t -> 'a t
+  val pp : key XFormat.pp -> 'a XFormat.pp -> 'a t XFormat.pp
 end
 module Make(P : Map.OrderedType) : S with type key = P.t = struct
   include Map.Make(P)
@@ -23,4 +24,5 @@ module Make(P : Map.OrderedType) : S with type key = P.t = struct
     conv of_list to_list @@
     list @@ tuple_2 k e
   )
+  let pp k v ppf t = XFormat.(list @@ tuple_2 k v) ppf @@ to_list t
 end

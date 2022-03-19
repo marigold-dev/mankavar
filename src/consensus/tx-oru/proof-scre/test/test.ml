@@ -3,6 +3,9 @@ module PS = Oru_scre_raw.Patricia_state
 module Scre = Oru_scre_raw.Scre
 module Utils = Oru_scre_raw.Utils
 
+let test_quick name f =
+  Alcotest.test_case name `Quick f
+
 let make init =
   let module P = struct let init = init end in
   let module S = PS.Make(P) in
@@ -17,8 +20,8 @@ let mk_bootstrap () =
   in
   (lst , (module S : PS.MAKE_RETURN))
 
-
-let test_simple_transfer () =
+let test_simple_transfer_to_key =
+  test_quick "transfer to key" @@ fun () ->
   let (lst , (module S)) = mk_bootstrap () in
   let a , b = List.nth lst 0 , List.nth lst 1 in
   assert (S.get_balance a = Some 1000L) ;
@@ -31,6 +34,64 @@ let test_simple_transfer () =
   assert (S.get_balance b = Some 1700L) ;
   ()
 
+let counter_contract =
+  let open Das_vm.C_like in
+  let c_program = [
+    function_ "main" "_" [
+      return @@ (
+        Utils.Eval.C_like.write (literal 0L) @@
+        add
+          (Utils.Eval.C_like.read_data (literal 0L))
+          (Utils.Eval.C_like.read (literal 0L))
+      ) ;    
+    ]
+  ] in
+  let program = Das_vm.Compile.compile_program c_program in
+  let storage = Das_vm.VMap.of_list [(0L , 0L)] in
+  Utils.Contract.make ~program ~storage
+
+let test_simple_origination =
+  test_quick "origination" @@ fun () ->
+  let (lst , (module S)) = mk_bootstrap () in
+  let a = List.nth lst 0 in
+  let open Utils in
+  let op = Operation.origination @@
+    Origination.make_tpl a 300L counter_contract Das_vm.VMap.empty 100L in
+  ignore @@ Scre.do_operation op (module S) ;
+  assert (S.get_balance a = Some 700L) ;
+  assert (S.get_balance
+    (Account_index.contract_index @@ Contract_index.of_int 1) = Some 300L) ;
+  assert (Contract.equal counter_contract @@ S.get_contract_exn 1L) ;
+  ()
+
+let test_simple_transfer_to_contract =
+  test_quick "transfer to contract" @@ fun () ->
+  let (lst , (module S)) = mk_bootstrap () in
+  let push_op op =
+    ignore @@ Scre.do_operation op (module S)
+  in
+  let a = List.nth lst 0 in
+  let open Utils in
+  push_op @@ Operation.origination @@
+    Origination.make_tpl a 300L counter_contract Das_vm.VMap.empty 100L ;
+  let b = Account_index.contract_index 1L in
+  push_op @@ Operation.transfer @@
+    Transfer.make_tpl a b 300L [|15L|] 100L ;
+  let ctr = S.get_contract_exn 1L in
+  assert (Utils.equal_memory ctr.storage Das_vm.VMap.(of_list [(0L ,15L)])) ;
+  push_op @@ Operation.transfer @@
+    Transfer.make_tpl a b 300L [|17L|] 100L ;
+  let ctr = S.get_contract_exn 1L in
+  assert (Utils.equal_memory ctr.storage Das_vm.VMap.(of_list [(0L ,32L)])) ;
+  ()
+
+
 let () =
   Printexc.record_backtrace true ;
-  test_simple_transfer ()
+  Alcotest.run "ORU SCRE" [
+    ("simple" , [
+      test_simple_transfer_to_key ;
+      test_simple_origination ;
+      test_simple_transfer_to_contract ;
+    ]) ;
+  ]

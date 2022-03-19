@@ -2,11 +2,12 @@ open Das_helpers
 open Vm_helpers
 
 type value = Value.t
+let equal_value = Value.eq
 module VMap = Value.Map
 type stack = Stack.t
 
 type register = A | B | C | D
-[@@deriving ez]
+[@@deriving ez , eq]
 let register_pp ppf x =
   Format.fprintf ppf "r%s" @@ match x with
   | A -> "a"
@@ -23,7 +24,7 @@ let register_encoding = Encoding.(
 )
 
 type op1 = Not
-[@@deriving ez]
+[@@deriving ez , eq]
 let op1_pp ppf x =
   let print x = Format.fprintf ppf "%s" x in
   print @@ op1_destruct_tpl ("Not") x
@@ -40,7 +41,7 @@ type op2 =
 | Div
 | And
 | Or
-[@@deriving ez]
+[@@deriving ez , eq]
 let op2_pp ppf x =
   let print x = Format.fprintf ppf x in
   let print_s = print "%s" in
@@ -78,7 +79,7 @@ type 'ct instruction =
 | Custom of int (* external *)
 | Compile_time of 'ct
 | Halt
-[@@deriving ez]
+[@@deriving ez , eq]
 
 let instruction_pp ~compile_time ppf x =
   let print x = Format.dprintf x in
@@ -130,6 +131,9 @@ let rt_instruction_pp : _ -> rt_instruction -> _ =
 let rt_program_pp =
   let compile_time : _ -> empty -> _ = fun _ -> function _ -> . in
   program_pp ~compile_time
+let equal_rt_instruction : rt_instruction -> _ =
+  let f : empty -> _ = function _ -> . in
+  equal_instruction f
 
 let rt_instruction_encoding : rt_instruction Encoding.t = Encoding.(
   let renc = register_encoding in
@@ -203,4 +207,4 @@ type program = {
   code : rt_instruction list ;
   start_pointer : int ;
 }
-[@@deriving ez]
+[@@deriving ez , eq]

@@ -21,6 +21,7 @@ module Value = struct
   let encoding = Encoding.int64
   module Map = XMap.Make(Int64)
   let pp ppf = Format.fprintf ppf "%Ld"
+  let eq = Int64.equal
 end
 
 module Stack = struct

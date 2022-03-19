@@ -10,6 +10,7 @@
   (pps
    ppx_woo
    ppx_deriving.ord
+   ppx_deriving.eq
   )
  )
 )

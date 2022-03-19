@@ -113,9 +113,10 @@ module STATE_of_KVH(KVH : KVH) = struct
     let set_contract_exn k v =
       ignore @@ get_contract_exn k ;
       Contracts.set k v
-    let init_contract c =
+    let init_contract c balance =
       let new_index = Next_contract_index.get_next () in
-      set_contract_exn new_index c ;
+      Contracts.set new_index c ;
+      set_balance (Account_index.contract_index new_index) balance ;
       new_index
     let credit src amount =
       let src_balance = Option.get @@ get_balance src in

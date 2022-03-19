@@ -21,7 +21,7 @@ let hook =
 *)
 
 
-let arithmetics = test_quick "arithmetics" @@ fun () ->
+let add = test_quick "add" @@ fun () ->
   let open C_like in
   let expr = add $$ literal 21L $$ literal 21L in
   let prog = expression_to_program expr in
@@ -30,6 +30,17 @@ let arithmetics = test_quick "arithmetics" @@ fun () ->
   let a = Eval.get_register state A in
   assert (a = 42L) ;
   ()
+
+let sub = test_quick "sub" @@ fun () ->
+  let open C_like in
+  let expr = sub $$ literal 21L $$ literal 10L in
+  let prog = expression_to_program expr in
+  let asm = Compile.compile_program prog in
+  let state = Eval.ReadWrite.eval asm VMap.empty in
+  let a = Eval.get_register state A in
+  assert (a = 11L) ;
+  ()
+
 
 let app = test_quick "app" @@ fun () ->
   let open C_like in
@@ -104,14 +115,56 @@ let loop = test_quick "loop" @@ fun () ->
   assert (a = 55L) ;
   ()
 
+let call_custom1 = test_quick "call custom1" @@ fun () ->
+  let open C_like in
+  let prog = [
+    function_ "main" "_" [
+      return @@ (call_custom1 0 (literal 11L))
+    ] ;
+  ] in
+  let asm = Compile.compile_program prog in
+  let state = Eval.Double.eval asm () in
+  let a = Eval.get_register state A in
+  assert (a = 22L) ;
+  ()
+
+let call_custom2 = test_quick "call custom2" @@ fun () ->
+  let open C_like in
+  let prog = [
+    function_ "main" "_" [
+      return @@ (call_custom2 1 (literal 4L) (literal 10L))
+    ] ;
+  ] in
+  let asm = Compile.compile_program prog in
+  (* let pre_asm , _ = Compile.precompile_program prog in
+  Format.printf "Pre program:@;%a@;%!" Compile.pre_program_pp pre_asm ; *)
+  (* let hook =
+    let step = ref 0 in
+    fun s ->
+    step := !step + 1 ;
+    if !step > 2000 then assert false ;
+    Format.printf "step %d@;" !step ;
+    Format.printf "State:@[<v 2>@;%a@]@;" (state_pp Eval.Double.pp) s ;
+  in *)
+  (* Format.printf "@[<v 2>" ; *)
+  (* let state = Eval.Double.eval ~hook asm () in *)
+  let state = Eval.Double.eval asm () in
+  (* Format.printf "@]" ; *)
+  let a = Eval.get_register state A in
+  (* Format.printf "a : %Ld@;%!" a ; *)
+  assert (a = 160L) ; (* b doubled a times = 10 times 2 ^ 4 = 160 *)
+  ()
 
 let () =
   Printexc.record_backtrace true ;
   Alcotest.run "Epic VM" [
     "Simple" , [
-      arithmetics ;
+      add ;
+      sub ;
       app ;
       declarations ;
       loop ;
+      call_custom1 ;
+      call_custom2 ;
     ] ;
   ]

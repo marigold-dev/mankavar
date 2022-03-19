@@ -136,6 +136,10 @@ let rec compile_expression
   self env e @
   [O.call_op1 op' A A]
 )
+| Call_custom1 (i , e) -> (
+  self env e @
+  [O.custom i]
+)
 | Call_op2 (op , e1 , e2) -> (
   let op' = compile_op2 op in
   [i_comment "op2"] @
@@ -147,6 +151,18 @@ let rec compile_expression
     O.stack_drop 1 ;
     O.call_op2 op' A B A ;
   ] @ [i_comment "op2 end"]
+)
+| Call_custom2 (i , e1 , e2) -> (
+  [i_comment "custom2"] @
+  self env e1 @ (
+    O.stack_push A ::
+    self (Environment.push_dummy env) e2
+  ) @ [
+    O.register_set B A ;
+    O.stack_get 0 A ;
+    O.stack_drop 1 ;
+    O.custom i ;
+  ] @ [i_comment "custom2 end"]
 )
 
 let rec compile_block ~fenv ~env ~label_r : I.block -> pre_instruction list

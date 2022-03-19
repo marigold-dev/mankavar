@@ -159,3 +159,24 @@ module ReadWrite = struct
   let write = 1
   let eval = eval custom
 end
+
+module Double = struct
+  type memory = unit
+  let pp = Das_helpers.XFormat.unit
+
+  let custom (state : memory state) i = match i with
+  | 0 ->
+    set_register state A @@
+    Int64.mul 2L (get_register state A)
+  | 1 ->
+    set_register state A (
+      let r = ref @@ get_register state B in
+      let l = get_register state A in
+      for _ = 1 to Int64.to_int l do
+        r := Int64.mul 2L !r
+      done ;
+      !r
+    )
+  | _ -> assert false
+  let eval = eval custom
+end

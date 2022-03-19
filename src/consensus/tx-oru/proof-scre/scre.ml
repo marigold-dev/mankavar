@@ -36,6 +36,7 @@ module Do_transfer = struct
     (!Cache.content) |> VMap.to_list |> List.iter (fun (k , (v , to_write)) ->
       if to_write then State.write_slow dst_index k v
     ) ;
+    Format.printf "Contract Storage preflush:%a@;%!" Utils.memory_pp storage ;
     State.set_contract_exn dst_index c ;
     ()
 
@@ -54,7 +55,7 @@ module Do_transfer = struct
       let module Cache = Utils.Cache(struct
         let read_slow k = State.read_slow dst_index k
       end)() in
-      let module Run = Utils.Make_eval(Cache.Rw_slow) in
+      let module Run = Utils.Eval.Make(Cache.Rw_slow) in
       let input = op.payload in
       let storage = Contract.storage c in
       let state = Run.empty_state @@ Contract.program c in
@@ -72,7 +73,7 @@ module Do_transfer = struct
     match s with
     | Continuation { input ; storage ; state ; cache ; dst_index } -> (
       let module Cache = (val cache) in
-      let module Run = Utils.Make_eval(Cache.Rw_slow) in
+      let module Run = Utils.Eval.Make(Cache.Rw_slow) in
       match Run.step_n ~n state ~input ~storage with
       | Finished (storage' , n') -> (
         flush_contract (module State) (module Cache) storage' dst_index ;
@@ -95,7 +96,7 @@ module Do_transfer = struct
     match s with
     | Continuation { input ; storage ; state ; cache ; dst_index } -> (
       let module Cache = (val cache) in
-      let module Run = Utils.Make_eval(Cache.Rw_slow) in
+      let module Run = Utils.Eval.Make(Cache.Rw_slow) in
       let storage' = Run.step_until_stop state ~input ~storage in
       flush_contract (module State) (module Cache) storage' dst_index ;
       ()
@@ -112,11 +113,7 @@ module Do_origination = struct
     in
     XResult.value' noop @@
       State.debit src amount ;
-    let dst_index = State.init_contract contract in
-    let dst =
-      Account_index.contract_index dst_index
-    in
-    State.credit dst amount ;
+    let dst_index = State.init_contract contract amount in
     slow_memory |> VMap.iter (fun k v ->
       State.write_slow dst_index k v
     ) ;
@@ -158,7 +155,7 @@ module Do_operation = struct
       | Do_transfer.Continue c -> Continue (Do_transfer c)
       | Finished n -> Finished n
     )
-end
+end  
 
 let do_operation op (module State : STATE) : do_operation_result =
   Do_operation.eval (module State) op ;

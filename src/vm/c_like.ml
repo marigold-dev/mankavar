@@ -20,6 +20,8 @@ type expression =
 | Assignment of variable * expression
 | Call_op1 of op1 * expression
 | Call_op2 of op2 * expression * expression
+| Call_custom1 of int * expression
+| Call_custom2 of int * expression * expression
 [@@deriving ez]
 
 type statement =
