@@ -1,5 +1,5 @@
 open Das_helpers
-open Utils
+open Structs
 
 module Batch = struct
   type t = Operation.t list

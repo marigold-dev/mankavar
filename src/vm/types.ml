@@ -208,3 +208,8 @@ type program = {
   start_pointer : int ;
 }
 [@@deriving ez , eq]
+let program_encoding = Encoding.(
+  conv program_make_tpl' program_destruct @@ tuple_2
+    (list rt_instruction_encoding)
+    int
+)

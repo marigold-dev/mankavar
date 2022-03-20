@@ -9,15 +9,15 @@ type do_operation_result = {
 [@@deriving ez]
 
 open Das_helpers
-open Das_vm
-open Utils
+open Structs
+module type STATE = Patricia_state.STATE
 
 module Do_transfer = struct
   type continuation = {
     input : Transfer.payload ;
-    storage : memory ;
+    storage : Eval.memory ;
     state : unit Das_vm.state ;
-    cache : (module CACHE) ;
+    cache : (module Eval.CACHE) ;
     dst_index : Contract_index.t ;
   }
 
@@ -30,13 +30,13 @@ module Do_transfer = struct
   | Finished of int
 
   let flush_contract
-    (module State : STATE) (module Cache : CACHE) storage dst_index =
+    (module State : STATE) (module Cache : Eval.CACHE) storage dst_index =
     let c = State.get_contract_exn dst_index in
     let c = c |> Contract.set_storage storage in
-    (!Cache.content) |> VMap.to_list |> List.iter (fun (k , (v , to_write)) ->
+    (!Cache.content) |> Das_vm.VMap.to_list |> List.iter (fun (k , (v , to_write)) ->
       if to_write then State.write_slow dst_index k v
     ) ;
-    Format.printf "Contract Storage preflush:%a@;%!" Utils.memory_pp storage ;
+    Format.printf "Contract Storage preflush:%a@;%!" Eval.memory_pp storage ;
     State.set_contract_exn dst_index c ;
     ()
 
@@ -52,10 +52,10 @@ module Do_transfer = struct
     match dst with
     | Contract_index dst_index -> (
       let c = State.get_contract_exn dst_index in
-      let module Cache = Utils.Cache(struct
+      let module Cache = Eval.Cache(struct
         let read_slow k = State.read_slow dst_index k
       end)() in
-      let module Run = Utils.Eval.Make(Cache.Rw_slow) in
+      let module Run = Eval.Make(Cache.Rw_slow) in
       let input = op.payload in
       let storage = Contract.storage c in
       let state = Run.empty_state @@ Contract.program c in
@@ -73,7 +73,7 @@ module Do_transfer = struct
     match s with
     | Continuation { input ; storage ; state ; cache ; dst_index } -> (
       let module Cache = (val cache) in
-      let module Run = Utils.Eval.Make(Cache.Rw_slow) in
+      let module Run = Eval.Make(Cache.Rw_slow) in
       match Run.step_n ~n state ~input ~storage with
       | Finished (storage' , n') -> (
         flush_contract (module State) (module Cache) storage' dst_index ;
@@ -96,7 +96,7 @@ module Do_transfer = struct
     match s with
     | Continuation { input ; storage ; state ; cache ; dst_index } -> (
       let module Cache = (val cache) in
-      let module Run = Utils.Eval.Make(Cache.Rw_slow) in
+      let module Run = Eval.Make(Cache.Rw_slow) in
       let storage' = Run.step_until_stop state ~input ~storage in
       flush_contract (module State) (module Cache) storage' dst_index ;
       ()
@@ -114,7 +114,7 @@ module Do_origination = struct
     XResult.value' noop @@
       State.debit src amount ;
     let dst_index = State.init_contract contract amount in
-    slow_memory |> VMap.iter (fun k v ->
+    slow_memory |> Das_vm.VMap.iter (fun k v ->
       State.write_slow dst_index k v
     ) ;
     ()

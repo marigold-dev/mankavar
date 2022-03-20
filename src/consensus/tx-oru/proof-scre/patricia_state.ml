@@ -1,6 +1,22 @@
 open Das_helpers
-(* open Das_vm *)
-open Utils
+open Structs
+
+
+module type STATE = sig
+  val do_hash : unit -> Hash'.t
+
+  val get_balance : Account_index.t -> int64 option
+  val credit : Account_index.t -> int64 -> unit
+  val debit : Account_index.t -> int64 -> (unit , unit) result
+  val init_key : int64 -> Key_index.t
+  val get_contract_exn : Contract_index.t -> Contract.t
+  val set_contract_exn : Contract_index.t -> Contract.t -> unit
+  val init_contract : Contract.t -> int64 -> Contract_index.t
+  val read_slow : Contract_index.t -> int64 -> int64
+  val write_slow : Contract_index.t -> int64 -> int64 -> unit
+  val init : unit -> unit
+end
+
 
 module Balance = struct
   type t = int64
