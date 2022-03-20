@@ -207,6 +207,30 @@ module XList = struct
       aux (i + 1) (hd :: acc_sub) acc_all tl
     in
     aux 1 [] [] lst
+
+  (*
+    Grou `lst` in sub lists.
+    - no empty sub lists
+    - preserves order
+    - `f` states if two consecutive elements should be in same sub list
+  *)
+  let group_by_f f lst =
+    let rec aux acc_all acc_current prec_opt lst =
+      let flush () =
+        if acc_current = [] then acc_all else
+        (List.rev acc_current) :: acc_all
+      in
+      match lst , prec_opt with
+      | [] , _ -> flush () |> List.rev
+      | hd :: tl , Some prec when f hd prec ->
+        aux acc_all (hd :: acc_current) (Some hd) tl
+      | hd :: tl , None ->
+        aux acc_all (hd :: acc_current) (Some hd) tl
+      | hd :: tl , _ ->
+        aux ((List.rev acc_current) :: acc_all) [hd] (Some hd) tl
+    in
+    if lst = [] then [] else
+    aux [] [] None lst
 end
 
 module Index = struct

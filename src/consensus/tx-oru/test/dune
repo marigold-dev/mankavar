@@ -3,7 +3,8 @@
  (libraries
   oru_dummy
   oru_dummy_raw
+  woo
 
-  alcotest
+  test_helpers
  ) 
 )
