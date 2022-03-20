@@ -85,71 +85,94 @@ let test_simple_transfer_to_contract =
   assert (Utils.equal_memory ctr.storage Das_vm.VMap.(of_list [(0L ,32L)])) ;
   ()
 
-let test_inc_transfer_to_key n =
-  test_quick (Format.asprintf "transfer to key %d" n) @@ fun () ->
-  let (lst , (module S)) = mk_bootstrap () in
-  let a , b = List.nth lst 0 , List.nth lst 1 in
-  let open Utils in
-  let op = Operation.transfer @@
-    Transfer.make_tpl b a 300L (XArray.empty ()) 100L in
+let push_op (module S: PS.MAKE_RETURN) n ?exact ?(min = 0) ?(max = Int.max_int) op =
   let open Scre.Do_operation in
   let start = mk_state (module S) op in
-  let rec aux = function
-  | Continue c -> aux @@ step_n (module S) ~n:1 c
-  | Finished i -> i
+  let rec aux acc = function
+  | Continue c -> aux (acc + n) @@ step_n (module S) ~n c
+  | Finished i -> acc + i
   in
-  ignore @@ aux (Continue start) ;
-  assert (S.get_balance a = Some 1300L) ;
-  assert (S.get_balance b = Some 1700L) ;
-  ()
+  let nb_steps = aux (-n) (Continue start) in
+  match exact with
+  | None -> (
+    assert (nb_steps >= min) ;
+    assert (nb_steps <= max) ;
+    ()
+  )
+  | Some r -> (
+    match !r with
+    | None -> (
+      assert (nb_steps >= min) ;
+      assert (nb_steps <= max) ;
+      r := Some nb_steps ;
+    )
+    | Some e -> (
+      assert (nb_steps = e) ;
+      ()
+    )
+  )
 
-let test_inc_origination n =
-  test_quick (Format.asprintf "origination %d" n) @@ fun () ->
-  let (lst , (module S)) = mk_bootstrap () in
-  let a = List.nth lst 0 in
-  let open Utils in
-  let op = Operation.origination @@
-    Origination.make_tpl a 300L counter_contract Das_vm.VMap.empty 100L in
-  let open Scre.Do_operation in
-  let start = mk_state (module S) op in
-  let rec aux = function
-  | Continue c -> aux @@ step_n (module S) ~n:1 c
-  | Finished i -> i
+let nbs_steps = [ 1 ; 2 ; 5 ; 10 ; 20 ; 50 ]
+
+
+let tests_inc_transfer_to_key =
+  let exact = ref (Some 1) in
+  let aux n =
+    test_quick (Format.asprintf "transfer to key %d" n) @@ fun () ->
+    let (lst , (module S)) = mk_bootstrap () in
+    let a , b = List.nth lst 0 , List.nth lst 1 in
+    let push_op = push_op (module S) n in
+    let open Utils in
+    push_op ~exact @@ Operation.transfer @@
+      Transfer.make_tpl b a 300L (XArray.empty ()) 100L ;
+    assert (S.get_balance a = Some 1300L) ;
+    assert (S.get_balance b = Some 1700L) ;
+    ()
   in
-  ignore @@ aux (Continue start) ;
-  assert (S.get_balance a = Some 700L) ;
-  assert (S.get_balance
-    (Account_index.contract_index @@ Contract_index.of_int 1) = Some 300L) ;
-  assert (Contract.equal counter_contract @@ S.get_contract_exn 1L) ;
-  ()
+  List.map aux nbs_steps
 
-let test_inc_transfer_to_contract n =
-  test_quick (Format.asprintf "transfer to contract %d" n) @@ fun () ->
-  let (lst , (module S)) = mk_bootstrap () in
-  let push_op op =
-    let open Scre.Do_operation in
-    let start = mk_state (module S) op in
-    let rec aux = function
-    | Continue c -> aux @@ step_n (module S) ~n:1 c
-    | Finished i -> i
-    in
-    ignore @@ aux (Continue start) ;
+let tests_inc_origination =
+  let exact = ref (Some 1) in
+  let aux n =
+    test_quick (Format.asprintf "origination %d" n) @@ fun () ->
+    let (lst , (module S)) = mk_bootstrap () in
+    let a = List.nth lst 0 in
+    let open Utils in
+    let push_op = push_op (module S) n in
+    push_op ~exact @@ Operation.origination @@
+      Origination.make_tpl a 300L counter_contract Das_vm.VMap.empty 100L ;
+    assert (S.get_balance a = Some 700L) ;
+    assert (S.get_balance
+      (Account_index.contract_index @@ Contract_index.of_int 1) = Some 300L) ;
+    assert (Contract.equal counter_contract @@ S.get_contract_exn 1L) ;
+    ()
   in
-  let a = List.nth lst 0 in
-  let open Utils in
-  push_op @@ Operation.origination @@
-    Origination.make_tpl a 300L counter_contract Das_vm.VMap.empty 100L ;
-  let b = Account_index.contract_index 1L in
-  push_op @@ Operation.transfer @@
-    Transfer.make_tpl a b 300L [|15L|] 100L ;
-  let ctr = S.get_contract_exn 1L in
-  assert (Utils.equal_memory ctr.storage Das_vm.VMap.(of_list [(0L ,15L)])) ;
-  push_op @@ Operation.transfer @@
-    Transfer.make_tpl a b 300L [|17L|] 100L ;
-  let ctr = S.get_contract_exn 1L in
-  assert (Utils.equal_memory ctr.storage Das_vm.VMap.(of_list [(0L ,32L)])) ;
-  ()
+  List.map aux nbs_steps
 
+let tests_inc_transfer_to_contract =
+  let min = 10 in
+  let max = 100 in
+  let exact = ref None in
+  let aux n =
+    test_quick (Format.asprintf "transfer to contract %d" n) @@ fun () ->
+    let (lst , (module S)) = mk_bootstrap () in
+    let a = List.nth lst 0 in
+    let push_op = push_op (module S) n in
+    let open Utils in
+    push_op @@ Operation.origination @@
+      Origination.make_tpl a 300L counter_contract Das_vm.VMap.empty 100L ;
+    let b = Account_index.contract_index 1L in
+    push_op ~min ~max ~exact @@ Operation.transfer @@
+      Transfer.make_tpl a b 300L [|15L|] 100L ;
+    let ctr = S.get_contract_exn 1L in
+    assert (Utils.equal_memory ctr.storage Das_vm.VMap.(of_list [(0L ,15L)])) ;
+    push_op ~min ~max ~exact @@ Operation.transfer @@
+      Transfer.make_tpl a b 300L [|17L|] 100L ;
+    let ctr = S.get_contract_exn 1L in
+    assert (Utils.equal_memory ctr.storage Das_vm.VMap.(of_list [(0L ,32L)])) ;
+    ()
+  in
+  List.map aux nbs_steps
 
 let () =
   Printexc.record_backtrace true ;
@@ -159,15 +182,8 @@ let () =
       test_simple_origination ;
       test_simple_transfer_to_contract ;
     ]) ;
-    ("incremental" , [
-      test_inc_transfer_to_key 1 ;
-      test_inc_transfer_to_key 2 ;
-      test_inc_transfer_to_key 10 ;
-      test_inc_origination 1 ;
-      test_inc_origination 2 ;
-      test_inc_origination 10 ;
-      test_inc_transfer_to_contract 1 ;
-      test_inc_transfer_to_contract 2 ;
-      test_inc_transfer_to_contract 10 ;
-    ]) ;
+    ("incremental" , 
+      tests_inc_transfer_to_key @
+      tests_inc_origination @
+      tests_inc_transfer_to_contract ) ;
   ]
