@@ -53,7 +53,7 @@ let mk_empty_node endorsers x =
   let chain_state = put_node_state node_state in
   TendermintNode.empty start_clock endorsers ~network:"test" ~chain_state x
 
-let honest_live = test_quick "Live when nodes honest" @@ fun () ->
+let honest_live = test_quick "Can originate a contract" @@ fun () ->
   (* ignore @@ assert false ; *)
   let module Start = struct
     let start_clock = XPtime.now ()
@@ -105,6 +105,6 @@ let honest_live = test_quick "Live when nodes honest" @@ fun () ->
   ()
 
 let tests =
-  "Consensus Tendermint" , [
+  "Tendermint + SCRE" , [
     honest_live ;
   ] ;

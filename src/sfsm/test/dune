@@ -1,0 +1,8 @@
+(test
+ (name main)
+ (libraries
+  sfsm
+
+  alcotest
+ )
+)

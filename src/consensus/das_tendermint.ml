@@ -160,7 +160,7 @@ module RawTendermintNode = struct
 
   let noop (t : t) _ = [] , t
 
-
+  (* Used by the block proposer to build a block *)
   let build_block : t -> Block.t * t = fun t ->
     let height = t |> height in
     let block =
@@ -211,32 +211,34 @@ module RawTendermintNode = struct
 
 
   let propose_start_proposer t =
-
     let block_proposal , t =
-      t |> lock |> Option.fold
-      ~none:(
+      match t.lock with
+      | None -> (
         let b , t = build_block t in
         let bp = propose_block b t in
         bp , t
       )
-      ~some:(fun l ->
-        l |> Lock.content |> Prevote.content |> Prevote.content_destruct
-        ~nil:(fun () ->
+      | Some lock -> (
+        match lock.Lock.content.Prevote.content with
+        | Nil () -> (
           let b , t = build_block t in
           let bp = propose_block b t in
           bp , t
         )
-        ~block:(fun bh ->
-          let b = Blocks.find (l |> Lock.height) bh (t |> blocks) in
+        | Block bh -> (
+          let b = Blocks.find (Lock.height lock) bh t.blocks in
           let bp = propose_block b t in
           bp , t
         )
       )
     in
+    let t =
+      t |> set_step_state
+      (StepState.proposal @@ ProposalState.proposed block_proposal)
+    in
     [Send.broadcast @@ Message.consensus @@
       ConsensusMessage.block_proposal block_proposal] ,
-    t |> set_step_state
-      (StepState.proposal @@ ProposalState.proposed block_proposal)
+    t
 
   let propose_start_follower t =
     let t =
@@ -339,7 +341,6 @@ module RawTendermintNode = struct
     let t = set_clock new_clock t in
     let time_since_step = Ptime.diff new_clock (t |> step_start_time) in
     (* Format.printf "time since step: %a@;%!" Ptime.Span.pp time_since_step ; *)
-    
     (* Format.printf "New clock: %a@;%!" XPtime.pp_ms new_clock ;
     Format.printf "Step Start Time: %a@;%!" XPtime.pp_ms (t |> step_start_time) ;
     Format.printf "Time since step: %a@;%!" Ptime.Span.pp time_since_step ;
@@ -354,7 +355,6 @@ module RawTendermintNode = struct
     in *)
     if Ptime.Span.(compare time_since_step (t|>step_timeout) < 0) then
       return ([] , t) ;
-
     t
     |> set_step_start_time new_clock
     |> fun t -> t
