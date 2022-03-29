@@ -293,6 +293,38 @@ end
 
 module Height = Index.Make()
 
+module MapList = struct
+  module M = XMap.Make(Int)
+  module Raw = struct
+    type 'a t = {
+      size : int ;
+      content : 'a M.t ;
+    }
+    [@@deriving ez]
+    let empty = make_tpl 0 M.empty
+    let get_opt i t = M.find_opt i t.content
+    let get i t = M.find i t.content
+    let append v t =
+      make_tpl (t.size + 1) (M.add t.size v t.content)
+    let remove i t =
+      map_content (M.remove i) t
+    let encoding e =
+      let open Encoding in
+      conv make_tpl' destruct @@ tuple_2 int @@ M.encoding int e
+  end
+  module type SIGNATURE = sig
+    type 'a t
+    val empty : 'a t
+    val get_opt : int -> 'a t -> 'a option
+    val get : int -> 'a t -> 'a
+    val append : 'a -> 'a t -> 'a t
+    val remove : int -> 'a t -> 'a t
+    val size : 'a t -> int
+    val encoding : 'a Encoding.t -> 'a t Encoding.t
+  end
+  include (Raw : SIGNATURE)
+end
+
 module TaskClockedQueue = struct
 
   module Raw = struct
