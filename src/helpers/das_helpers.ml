@@ -12,6 +12,7 @@ let tuple3 x y z = (x , y, z)
 
 module XBool = struct
   let do_if_true b f = if b then f ()
+  let do_if_false b f = if not b then f ()
 end
 
 module XResult = struct

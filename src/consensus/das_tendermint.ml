@@ -23,7 +23,32 @@ module Transition = Transition
 module Message = Message
 module Tendermint_state = Tendermint_state
 
-module RawTendermintNode = struct
+module type BASE = sig
+  type t
+
+  val network_name_get : t -> string
+
+  val height_get : t -> Height.t
+  val height_increment : t -> t
+
+  val blocks_register : Block.t -> t -> t
+  val blocks_exists : t -> Height.t -> Hash'.t -> bool
+
+  (* Fails if no block finalized at given Height *)
+  val blocks_finalized_hash : t -> Height.t -> Hash'.t
+
+  (* The block must always exist (for instance, a locked block) *)
+  val blocks_get : t -> Height.t -> Hash'.t -> Block.t
+
+  val self_pk_get : t -> Addr.public_key
+  val sign_hash : t -> Hash'.t -> 'a Sig.signed
+  val endorsers_get : t -> Addr.public_key list
+  val proposer_get : t -> Round.Index.t -> Addr.public_key
+  val chain_state_hash_get : t -> Transition.State.t Hash.t
+  val chain_state_apply : Block.operations -> t -> t
+  val mempool_operations_pick : t -> Block.operations * t
+end
+module RawTendermintNode(Base : BASE) = struct
   (*
     Tendermint Node
     To check manually:
@@ -33,25 +58,29 @@ module RawTendermintNode = struct
   open Tendermint_state
 
   type t = {
-    network : string ;
-    account : Addr.t ;
+    base : Base.t ;
     clock : Ptime.t ;
-    endorsers : Addr.public_key list ;
-    height : Height.t ;
     round : Round.Index.t ;
     lock : Lock.t option ;
     commitments : CommitmentState.t ;
-    blocks : Blocks.t ;
     step_start_time : Ptime.t ;
     step_state : StepState.t ;
-    chain_state : Transition.State.t ;
-    mempool : Mempool.t ;
   }
   [@@deriving ez]
 
   let pp_id : _ -> t -> unit = fun ppf t ->
-    t |> account |> Addr.public_key |> Addr.pp_public_key ppf
+    t.base |> Base.self_pk_get |> Addr.pp_public_key ppf
+  let height_get t = Base.height_get t.base
+  let mempool_operations_pick t =
+    let ops , base = Base.mempool_operations_pick t.base in
+    ops , { t with base }
 
+  let proposer_current_get : t -> Addr.public_key = fun t ->
+    Base.proposer_get t.base (t|>round)
+  let is_current_proposer t =
+    Addr.public_key_equal
+      (proposer_current_get t)
+      (Base.self_pk_get t.base)
   let set_step_state s t =
     let t =
       if StepState.compare_kind s (step_state t) <> 0
@@ -60,11 +89,10 @@ module RawTendermintNode = struct
     in
     set_step_state s t
 
-  let sign t hash =
-    Sig.sign_hash ~hash ~secret_key:(t |> account |> Addr.secret_key) 
+  let sign_hash t hash = Base.sign_hash t.base hash 
   let check_sig_by_endorser = fun ~hash s t ->
     let pk = Sig.signer s in
-    List.mem pk (t |> endorsers) &&
+    List.mem pk (Base.endorsers_get t) &&
     Sig.check_hash ~hash ~public_key:pk ~signature:s
   
   let unlock t = t |> set_lock Option.none
@@ -74,82 +102,59 @@ module RawTendermintNode = struct
     |> Prevote.get_block_opt
     |> Option.iter (fun bh -> 
       let h = l |> Lock.content |> Prevote.height in
-      if not @@ Blocks.mem h bh (t |> blocks)
+      if not @@ Base.blocks_exists t.base h bh
       then fail () ;
     )) ;
     t |> set_lock @@ Option.some l
 
   let propose_block : Block.t -> t -> BlockProposal.t = fun block t ->
-    let height = t |> height in
+    let height = Base.height_get t.base in
     let round = t |> round in
     let unsigned = BlockProposal.Unsigned.make ~height ~round ~block in
     let proposer_signature =
       let hash = do_hash @@ BlockProposal.Unsigned.to_bytes @@ unsigned in
-      hash |> sign t |> Sig.get
+      hash |> sign_hash t |> Sig.get
     in
     BlockProposal.make ~unsigned ~proposer_signature
 
-  (*
-    `get_proposer` should fail when the node can't know the proposer
-    of given height and round
-  *)
-  let get_proposer
-  : endorsers -> height -> Round.Index.t -> t -> Addr.public_key
-  = fun lst h r _ ->
-    let l = List.length lst in
-    let h' =
-      h
-      |> Height.to_int32
-      |> fun h -> Int32.(rem h @@ of_int l)
-      |> Int32.to_int
-    in
-    let r' = r |> Round.Index.to_int32 |> Int32.to_int in
-    let i = (h' + r') mod l in
-    List.nth lst i
 
-  let get_current_proposer : t -> Addr.public_key = fun t ->
-    get_proposer (t|>endorsers) (t|>height) (t|>round) t
 
   let do_prevote_current
   : t -> Prevote.content -> Message.t = fun t content ->
-    let height = t |> height in
+    let height = Base.height_get t.base in
     let round = t |> round in
     let unsigned = Prevote.unsigned_make ~content ~height ~round in
     let hash = unsigned |> Prevote.unsigned_to_bytes |> do_hash in
-    hash |> sign t
+    hash |> sign_hash t
     |> Sig.get |> Prevote.make_tpl unsigned
     |> ConsensusMessage.prevote |> Message.consensus
   
   let do_precommit : t -> Precommitment.block_hash -> Message.t = fun t bh ->
-    let unsigned
-    = Precommitment.unsigned_make ~block_hash:bh ~height:(t |> height) in
+    let height = Base.height_get t.base in
+    let unsigned = Precommitment.unsigned_make ~block_hash:bh ~height in
     let hash = unsigned |> Precommitment.unsigned_to_bytes |> do_hash in
-    hash |> sign t
+    hash |> sign_hash t
     |> Sig.get |> Precommitment.make_tpl unsigned
     |> ConsensusMessage.precommitment |> Message.consensus
 
   let do_commit : t -> Commitment.unsigned -> Message.t = fun t unsigned ->
     let hash = unsigned |> Commitment.unsigned_to_bytes |> do_hash in
-    hash |> sign t
+    hash |> sign_hash t
     |> Sig.get |> Commitment.make_tpl unsigned
     |> ConsensusMessage.commitment |> Message.consensus
 
   type message = Message.t
   type consensus_message = ConsensusMessage.t
 
-  let empty ~network ~chain_state clock endorsers account : t =
-    let height = Height.zero in
+  let empty base clock : t =
     let step_state = StepState.proposal @@ ProposalState.no_proposal in
     let commitments = CommitmentState.empty in
     let step_start_time = clock in
     let lock = Option.none in
     let round = Round.Index.zero in
-    let blocks = Blocks.empty in
-    let mempool = Mempool.empty in
     make
-      ~account ~clock ~endorsers ~height ~step_state
-      ~commitments ~blocks ~lock ~round ~step_start_time
-      ~network ~chain_state ~mempool
+      ~clock ~step_state ~base
+      ~commitments ~lock ~round ~step_start_time
 
   (*
     This should increase as round increases to allow for bad networks. Adaptative.
@@ -162,32 +167,24 @@ module RawTendermintNode = struct
 
   (* Used by the block proposer to build a block *)
   let build_block : t -> Block.t * t = fun t ->
-    let height = t |> height in
+    let height = height_get t in
     let block =
       let prev_height = Height.predecessor height in
       let prev_hash =
         if Height.(equal height zero) then
           Hash'.dummy
         else
-          t |> blocks |> Blocks.find_final prev_height |> Option.get
+          Base.blocks_finalized_hash t.base prev_height
       in
       let header =
         let previous_hash = prev_hash in
-        let state_hash = Transition.State.do_hash (t |> chain_state) in
+        let state_hash = Base.chain_state_hash_get t.base in
         let time = t |> clock in
-        let network_name = t |> network in
+        let network_name = Base.network_name_get t.base in
         Block.Header.make
           ~height ~time ~previous_hash ~network_name ~state_hash
       in
-      let operations , t =
-        let ops , mempool =
-          let gas_limit = Transition.Bunch.max_gas in
-          Mempool.get ~gas_limit (mempool t)
-        in
-        let bunch = Transition.Bunch.make ops in
-        let t = set_mempool mempool t in
-        bunch , t
-      in
+      let operations , t = mempool_operations_pick t in
       let previous_commitments =
         let prevs =
           if Height.(equal height zero) then
@@ -209,7 +206,6 @@ module RawTendermintNode = struct
     in
     block , t
 
-
   let propose_start_proposer t =
     let block_proposal , t =
       match t.lock with
@@ -226,7 +222,7 @@ module RawTendermintNode = struct
           bp , t
         )
         | Block bh -> (
-          let b = Blocks.find (Lock.height lock) bh t.blocks in
+          let b = Base.blocks_get t.base (Lock.height lock) bh in
           let bp = propose_block b t in
           bp , t
         )
@@ -248,8 +244,7 @@ module RawTendermintNode = struct
     [] , t
 
   let propose_start t =
-    if Addr.public_key_equal
-      (get_current_proposer t) (t |> account |> Addr.public_key)
+    if is_current_proposer t
     then propose_start_proposer t
     else propose_start_follower t
 
@@ -302,18 +297,20 @@ module RawTendermintNode = struct
 
   let precommitment_timeout t s =
     (* Format.printf "Precommitment timeout@;%!" ; *)
-    s |> PrecommitmentState.precommitted_block |> Option.fold
-    ~none:(
+    match PrecommitmentState.precommitted_block s with
+    | None -> (
       t
       |> map_round Round.Index.increment
       |> propose_start
     )
-    ~some:(fun pc -> (
+    | Some pc -> (
       let h = Precommitment.block_hash pc in
-      [Commitment.unsigned_make_tpl h (t |> height) |> do_commit t |> Send.broadcast] ,
-      t
-      |> set_step_state @@ StepState.commitment ()
-    ))
+      let t =
+        t |> set_step_state @@ StepState.commitment ()
+      in
+      let commitment = Commitment.unsigned_make_tpl h (height_get t) in
+      [commitment |> do_commit t |> Send.broadcast] , t
+    )
 
   let commit_timeout t () =
     (* Format.printf "Commitment timeout@;%!" ; *)
@@ -322,9 +319,8 @@ module RawTendermintNode = struct
     |> propose_start
 
   let postcommitment_timeout t _pc =
-    t
-    |> map_height Height.increment
-    |> propose_start
+    let t = map_base Base.height_increment t in
+    propose_start t
 
   (* TODO: Add round drift for bad network *)
   let step_timeout t =
@@ -372,7 +368,7 @@ module RawTendermintNode = struct
     let noop x = return @@ noop t x in
     (* Format.printf "Receiving block proposal@;%!" ; *)
     (* Check Previous Commitments *) (
-      XBool.do_if_true (not @@ Height.equal (t |> height) Height.zero)
+      XBool.do_if_false (Height.equal (height_get t) Height.zero)
       @@ fun () ->
       let bh =
         bp
@@ -380,7 +376,7 @@ module RawTendermintNode = struct
         |> Block.Header.previous_hash
       in
       let uc
-      = Commitment.unsigned_make_tpl bh (Height.predecessor @@ height t) in
+      = Commitment.unsigned_make_tpl bh (Height.predecessor @@ height_get t) in
       (* Format.printf "grep uc : %a@;%!" Commitment.pp_unsigned uc ; *)
       let cs
       = t |> commitments |> CommitmentState.find_opt uc |> Option.get in
@@ -398,7 +394,7 @@ module RawTendermintNode = struct
       (* Format.printf "reading proposal@;%!" ; *)
       [Send.gossip @@ Message.block_proposal bp] ,
       t
-      |> map_blocks (Blocks.add (bp |> BlockProposal.block))
+      |> map_base (Base.blocks_register (bp |> BlockProposal.block))
       |> set_step_state @@ StepState.proposal ps
 
   let process_prevote t pv =
@@ -433,28 +429,25 @@ module RawTendermintNode = struct
     |> fun t -> [Send.gossip @@ Message.precommitment pc] , t
 
   let process_block t bi =
-    [Send.gossip @@ Message.block bi] ,
-    t |> map_blocks (Blocks.add (bi |> BlockInfo.block))
+    let t = map_base (Base.blocks_register bi.BlockInfo.block) t in
+    [Send.gossip @@ Message.block bi] , t
 
   let get_committed_block_hash t =
     t
     |> commitments |> CommitmentState.committed_block
-  let get_block t bh =
-    t
-    |> blocks |> Blocks.find_opt (t |> height) bh
 
   let commit_block t =
     PseudoEffect.fail_default t @@ fun { fail } ->
     let bh = t |> get_committed_block_hash |> XOption.value' fail in
-    let b = bh |> get_block t |> XOption.value' fail in
-    let h = t |> height in
+    let h = height_get t in
+    let b = Base.blocks_get t.base h bh in
     Format.printf "Committing block@;%!" ;
     (* Format.printf "Got committed block@;%!" ; *)
     (* Format.printf "last Number of commitments:%d@;%!" @@ CommitmentState.all_commitments_nb (t |> commitments) ; *)
     let t
     = t |> set_step_state @@ StepState.postcommitment bh in
     let t
-    = t |> map_chain_state @@ Transition.do_bunch (Block.operations b) in 
+    = t |> map_base @@ Base.chain_state_apply (Block.operations b) in 
     let t
     = t |> map_blocks @@ Blocks.finalize h bh in
     let t = t |> set_lock None in
