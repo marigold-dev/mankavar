@@ -55,8 +55,6 @@ let simple_submit_and_flush = fun () ->
   ) in
   () *)
 
-
-
 let () =
   Printexc.record_backtrace true ;
   Test_helpers.run "ORU TX" [

@@ -6,15 +6,15 @@ module Rejection = struct
   type t = {
     height : Height.t ;
     batch : BatchIndex.t ;
-    batch_commitment : BatchCommitments.Index.t ;
+    commitment : Commitment.Index.t ;
     content : Rejection.t ;
   }
   [@@deriving ez]
   let encoding =
     let open Encoding in
     conv make_tpl' destruct @@ tuple_4
-      Height.encoding BatchIndex.encoding BatchCommitments.Index.encoding
-      Rejection.encoding
+      Height.encoding BatchIndex.encoding
+      Commitment.Index.encoding Rejection.encoding
 
 end
 
@@ -22,16 +22,16 @@ module CounterRejection = struct
   type t = {
     height : Height.t ;
     batch : BatchIndex.t ;
-    batch_commitment : BatchCommitments.Index.t ;
-    rejection : RejectionIndex.t ;
+    commitment : Commitment.Index.t ;
+    rejection : Structs.Rejection.Index.t ;
     content : CounterRejection.t ;
   }
   [@@deriving ez]
   let encoding =
     let open Encoding in
     conv make_tpl' destruct @@ tuple_5
-      Height.encoding BatchIndex.encoding BatchCommitments.Index.encoding
-      RejectionIndex.encoding CounterRejection.encoding
+      Height.encoding BatchIndex.encoding Commitment.Index.encoding
+      Structs.Rejection.Index.encoding CounterRejection.encoding
 end
 
 module Commitment = struct

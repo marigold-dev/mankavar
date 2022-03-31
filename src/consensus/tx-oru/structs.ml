@@ -6,10 +6,7 @@ module HMap = struct
 end
 
 module BatchIndex = Index.Make()
-module BMap = struct
-  include XMap.Make(BatchIndex)
-  let encoding x = encoding BatchIndex.encoding x
-end
+module BMap = BatchIndex.Map
 
 module Commitment = struct
   module Infra = struct
@@ -33,24 +30,9 @@ module Commitment = struct
     if i = -1
     then t.previous_hash
     else List.nth t.hashes i
-end
-
-module BatchCommitments = struct
-  (* content * is_valid *)
-  type t = (Commitment.t * bool) list
-  let encoding : t Encoding.t =
-    let open Encoding in
-    list (tuple_2 Commitment.encoding bool)
-  let append x (t : t) : t = t @ [x , true]
   module Index = Index.Make()
-  let get_valid i (t : t) =
-    let (c , v) = Index.to_int i |> List.nth t in
-    assert v ;
-    c
-  let set_invalid i (t : t) : t =
-    XList.nth_map (fun (c , _) -> (c , false)) (Index.to_int i) t
 end
-module RejectionIndex = Index.Make()
+module CMap = Commitment.Index.Map
 
 module Rejection = struct
   module HashIndex = Index.Make()
@@ -66,6 +48,7 @@ module Rejection = struct
     let open Encoding in
     conv make_tpl' destruct @@ tuple_2
       Commitment.HashIndex.encoding (list Hash'.encoding)
+  module Index = Index.Make()
 end
 
 module CounterRejection = struct

@@ -253,9 +253,13 @@ module Index = struct
       t
       |> map_height Int32.succ
     let predecessor t = t |> map_height Int32.pred
-    module Map = XMap.Make(struct type nonrec t = t let compare = compare end)
-    let pp ppf x = Format.fprintf ppf "%ld" (x |> get_height_exn)
     let encoding = Encoding.(conv of_int32 to_int32 int32)
+    module Map = struct
+      let encoding' = encoding
+      include XMap.Make(struct type nonrec t = t let compare = compare end)
+      let encoding x = encoding encoding' x
+    end
+    let pp ppf x = Format.fprintf ppf "%ld" (x |> get_height_exn)
     let (<) a b = compare a b < 0
     let (<=) a b = compare a b <= 0
     let (>) a b = compare a b > 0
@@ -279,9 +283,12 @@ module Index = struct
     val predecessor : t -> t
     val pp : Format.formatter -> t -> unit
     val encoding : t Encoding.t
-    module Map : module type of XMap.Make(
-      struct type nonrec t = t let compare = compare end
-    )
+    module Map : sig
+      include module type of XMap.Make(
+        struct type nonrec t = t let compare = compare end
+      )
+      val encoding : 'a Encoding.t -> 'a t Encoding.t
+    end
     val (<) : t -> t -> bool
     val (<=) : t -> t -> bool
     val (>) : t -> t -> bool
@@ -308,18 +315,37 @@ module MapList = struct
       make_tpl (t.size + 1) (M.add t.size v t.content)
     let remove i t =
       map_content (M.remove i) t
+    let fold f t = M.fold f t.content
+    let first_opt t =
+      let s = size t in
+      let rec aux i =
+        if i >= s then None
+        else match get_opt i t with
+        | None -> aux (i + 1)
+        | Some x -> Some x
+      in
+      aux 0
+    let is_empty t = Option.is_none @@ first_opt t
     let encoding e =
       let open Encoding in
       conv make_tpl' destruct @@ tuple_2 int @@ M.encoding int e
   end
   module type SIGNATURE = sig
+    (*
+      MapList is ever growing.
+      Even if you remove an element, size does not decrease.
+      Practical so that indexes are kept.  
+    *)
     type 'a t
     val empty : 'a t
     val get_opt : int -> 'a t -> 'a option
     val get : int -> 'a t -> 'a
     val append : 'a -> 'a t -> 'a t
     val remove : int -> 'a t -> 'a t
+    val fold : (int -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
     val size : 'a t -> int
+    val first_opt : 'a t -> 'a option
+    val is_empty : 'a t -> bool
     val encoding : 'a Encoding.t -> 'a t Encoding.t
   end
   include (Raw : SIGNATURE)
