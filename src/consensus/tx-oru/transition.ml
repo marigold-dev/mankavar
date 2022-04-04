@@ -12,7 +12,10 @@ let c_STEPS_PER_COMMIT_HASH = 1_000_000L
 (* NB_COMMITS_PER_BLOCK_MAX = c_STEPS_PER_BLOCK / c_STEPS_PER_COMMIT = 1_000 *)
 let c_STEPS_PER_REJECT_HASH = 100L
 (* NB_REJECT_PER_COMMIT_MAX = c_STEPS_PER_COMMIT / c_STEPS_PER_REJECT = 10_000 *)
-let c_FINALITY_IN_HEIGHT = 1_000
+let c_FINALITY_IN_HEIGHT = 3
+
+(* Must be at least 2 bigger than c_FINALITY_IN_HEIGHT *)
+let c_FLUSH_PERIOD_IN_HEIGHT = 2 * c_FINALITY_IN_HEIGHT
 
 module State = struct
   (*
@@ -34,7 +37,11 @@ module State = struct
     conv commitment_state_make_tpl' commitment_state_destruct @@ tuple_2
       Commitment.encoding
       (MapList.encoding Rejection.encoding)
-
+  let commitment_state_pp ppf t =
+    let print x = Format.fprintf ppf x in
+    print "@[<v>Rejections: #%d@;" @@ MapList.size t.rejections ;
+    print "Content: %a@]" Commitment.pp t.commitment ;
+    ()
   type batch_state = {
     at_commitments : commitment_state CMap.t ;
     next_commitment_index : Commitment.Index.t ;
@@ -47,15 +54,31 @@ module State = struct
       (CMap.encoding commitment_state_encoding)
       Commitment.Index.encoding
       Batch.encoding
-
+  let batch_state_pp ppf t =
+    let print x = Format.fprintf ppf x in
+    print "@[<v>Next Commitment Index: %a@;"
+      Commitment.Index.pp t.next_commitment_index ;
+    print "Batch@;" ;
+    print "Commitments:@[<v 2>@;%a@]@]"
+      (CMap.pp Commitment.Index.pp commitment_state_pp) t.at_commitments ;
+    ()
   type height_state = {
     at_batches : batch_state BMap.t ;
+    finalized_hash : Hash'.t option ;
   }
   [@@deriving ez]
+  let height_state_pp ppf t =
+    let print x = Format.fprintf ppf x in
+    print "@[<v>Finalized: %a@;" (XOption.pp Hash'.pp) t.finalized_hash ;
+    print "Batches:@[<v 2>@;%a@]@]"
+      (BMap.pp BatchIndex.pp batch_state_pp) t.at_batches ;
+    ()
+  let hash_state_empty = height_state_make_tpl BMap.empty Option.none
   let height_state_encoding =
     let open Encoding in
-    conv height_state_make_tpl' height_state_destruct @@
+    conv height_state_make_tpl' height_state_destruct @@ tuple_2
       (BMap.encoding batch_state_encoding)
+      (option Hash'.encoding)
 
   type t = {
     height : Height.t ;
@@ -63,6 +86,13 @@ module State = struct
     at_heights : height_state HMap.t ;
   }
   [@@deriving ez]
+  let pp ppf t =
+    let print x = Format.fprintf ppf x in
+    print "@[<v>Height %a@;" Height.pp t.height ;
+    print "@[<v 2>Heights:@;%a@]"
+      (HMap.pp Height.pp height_state_pp) t.at_heights ;
+    print "@]" ;
+    ()
 
   let encoding : t Encoding.t =
     let open Encoding in
@@ -84,7 +114,8 @@ module State = struct
       |> List.mapi (fun i x -> (BatchIndex.of_int i , x))
       |> BMap.of_list
     in
-    let new_height = height_state_make_tpl current_batches in
+    Format.printf "Flush Batches: %a@;%!" Height.pp (height t) ;
+    let new_height = height_state_make_tpl current_batches None in
     t
     (* Add the current batches to the current height *)
     |> map_at_heights (HMap.add (height t) new_height)
@@ -96,9 +127,9 @@ module State = struct
   let commitment_append = fun h bi c t ->
     let cs = commitment_state_make_tpl c MapList.empty in
     t
-    |> map_at_heights @@ HMap.update' h
+    |> map_at_heights @@ HMap.update' ~default:hash_state_empty h
     @@ map_at_batches @@ BMap.update' bi (fun bs ->
-      let i = bs |> next_commitment_index in
+      let i = bs |> next_commitment_index in 
       bs
       |> map_next_commitment_index Commitment.Index.increment
       |> map_at_commitments (CMap.add i cs)
@@ -149,19 +180,42 @@ module State = struct
       )
     ) (at_commitments bs) bs
 
+
+
+
   let commitments_flush
-  : Height.t -> t -> (Commitment.Index.t * Commitment.t) BMap.t
+  : Height.t -> t -> t * (Commitment.Index.t * Commitment.t) BMap.t
   = fun h t ->
     (* Remove all commitments that didn't counter their rejections *)
     let t = t |> rejections_flush h in
     (* Retrieve winning commitments *)
-    t
-    |> at_heights |> HMap.find h
-    |> at_batches |> BMap.map (fun bs ->
-      bs
-      |> at_commitments |> CMap.find_first (fun _ -> true)
-      |> fun (x , y) -> (x , commitment y)
-    )
+    let commitments = t
+      |> at_heights |> HMap.find h
+      |> at_batches |> BMap.map (fun bs ->
+        bs
+        |> at_commitments |> CMap.find_first (fun _ -> true)
+        |> fun (x , y) -> (x , commitment y)
+      )
+    in
+    (* Apply last commitment *)
+    let t =
+      t
+      |> map_at_heights @@ HMap.update' h (fun hs ->
+        let final_hash =
+          match BMap.find_last_opt (fun _ -> true) commitments with
+          | Some (_ , (_ , last_commitment)) ->
+            last_commitment |> Commitment.hashes |> XList.last
+          | None -> (
+            (* This only happens if a block is literally empty *)
+            t
+            |> at_heights |> HMap.find (Height.predecessor h)
+            |> finalized_hash |> Option.get
+          )
+        in
+        set_finalized_hash (Option.some final_hash) hs
+      )
+    in
+    (t , commitments)
 end
 
 type do_operation_result = {
@@ -249,11 +303,27 @@ let counter_reject
 
 let flush_block : State.t -> State.t = fun t ->
   let t = t |> State.current_batches_flush in
-  let final_h = Height.map_int (fun x -> x - c_FINALITY_IN_HEIGHT) t.height in
-  let _commitments = State.commitments_flush final_h t in
+  let t , _commitments_opt =
+    PseudoEffect.returner @@ fun { return } ->
+    let final_h =
+      Height.map_int (fun x -> x - c_FINALITY_IN_HEIGHT) t.height
+    in
+    (* Finality is before the start of the chain *)
+    if Height.lz final_h then return (t , None) ;
+    let t , commitments = State.commitments_flush final_h t in
+    (t , Some commitments)
+  in
+  let t =
+    PseudoEffect.returner @@ fun { return } ->
+    let flush_h =
+      Height.map_int (fun x -> x - c_FLUSH_PERIOD_IN_HEIGHT) t.height
+    in
+    (* Block to flush is before the start of the chain *)
+    if Height.lz flush_h then return t ;
+    t |> State.map_at_heights @@ HMap.remove flush_h
+  in
   t
   |> State.height_increment
-  |> State.map_at_heights @@ HMap.remove final_h
 
 let do_operation : Op.t -> State.t -> do_operation_result = fun op s ->
   Op.destruct ~submit_batch ~commit ~reject ~counter_reject op s

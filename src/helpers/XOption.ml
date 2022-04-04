@@ -21,3 +21,7 @@ module GADT = struct
   | Empty : ('a , empty) content
   type 'a t = Wrap : ('a , 'b) content -> 'a t
 end
+
+let pp f ppf x = match x with
+  | Some x -> f ppf x
+  | None -> ()

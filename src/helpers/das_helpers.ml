@@ -231,6 +231,8 @@ module XList = struct
     in
     if lst = [] then [] else
     aux [] [] None lst
+
+  let range n = List.init n Fun.id
 end
 
 module Index = struct
@@ -266,6 +268,8 @@ module Index = struct
     let (>=) a b = compare a b >= 0
     let (<>) a b = compare a b <> 0
     let (=) a b = compare a b = 0
+    let lt = (<)
+    let lz x = lt x zero
   end
 
   module Make() : sig
@@ -278,6 +282,8 @@ module Index = struct
     val map_int : (int -> int) -> t -> t
     val compare : t -> t -> int
     val equal : t -> t -> bool
+    val lt : t -> t -> bool
+    val lz : t -> bool
     val zero : t
     val increment : t -> t
     val predecessor : t -> t

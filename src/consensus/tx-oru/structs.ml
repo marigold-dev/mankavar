@@ -20,6 +20,11 @@ module Commitment = struct
     hashes : infra list ;
   }
   [@@deriving ez]
+  let pp ppf t =
+    let print x = Format.fprintf ppf x in
+    print "Previous Hash: %a@;" Hash'.pp t.previous_hash ;
+    print "Hashes: %d" @@ List.length t.hashes ;
+    ()
   let encoding =
     let open Encoding in
     conv make_tpl' destruct @@ tuple_2

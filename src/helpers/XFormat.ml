@@ -1,7 +1,7 @@
 type 'a pp = Format.formatter -> 'a -> unit
 
 let array f ppf xs =
-  Format.fprintf ppf "@[<hov 2>{ " ;
+  Format.fprintf ppf "@[<v 2>{ " ;
   xs |> Array.iter (fun x ->
     Format.fprintf ppf "%a" f x
   ) ;
@@ -9,15 +9,15 @@ let array f ppf xs =
   ()
 
 let list f ppf xs =
-  Format.fprintf ppf "@[<hov 2>[ " ;
+  Format.fprintf ppf "@[<v 2>[ " ;
   xs |> List.iter (fun x ->
-    Format.fprintf ppf "%a" f x
+    Format.fprintf ppf "%a ;@;" f x
   ) ;
-  Format.fprintf ppf "]@]" ;
+  Format.fprintf ppf " ]@]" ;
   ()
 
 let tuple_2 a b ppf (x , y) =
-  Format.fprintf ppf "@[<hov 2>( %a , @; %a )@]" a x b y
+  Format.fprintf ppf "@[<v 2>( %a , @; %a )@]" a x b y
 let pair = tuple_2
 
 let conv f pp ppf x = pp ppf @@ f x
