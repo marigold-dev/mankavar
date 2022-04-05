@@ -72,9 +72,8 @@ let encoding =
 
 module Bunch = struct
   type nonrec t = t list
-  let make lst = lst
+  let of_list lst = lst
   let to_list lst = lst
   let encoding = Encoding.list encoding
-  let dummy = []
   let max_gas = 1L
 end

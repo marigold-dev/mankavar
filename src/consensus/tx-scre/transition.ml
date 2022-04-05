@@ -153,7 +153,7 @@ module Bunch = struct
   let max_gas_per_op = 10_000_000L
   let max_size_per_op = 10_000 (* max size in int64 *)
   type t = Operation.t list
-  let make lst : t =
+  let of_list lst : t =
     let assert_max_gas_per_op op =
       assert (Int64.compare (Operation.get_max_gas op) max_gas_per_op <= 0)
     in
@@ -168,7 +168,6 @@ module Bunch = struct
     in
     assert (Int64.compare gas_sum max_gas <= 0) ;
     lst
-  let dummy = make []
   let to_list (x : t) = x
   let encoding : t Encoding.t = Encoding.(list Operation.encoding)
 end

@@ -23,6 +23,10 @@ module Transition = Transition
 module Message = Message
 module Tendermint_state = Tendermint_state
 
+module RawMempoolNode = struct
+
+end
+
 module RawTendermintNode = struct
   (*
     Tendermint Node
@@ -184,7 +188,7 @@ module RawTendermintNode = struct
           let gas_limit = Transition.Bunch.max_gas in
           Mempool.get ~gas_limit (mempool t)
         in
-        let bunch = Transition.Bunch.make ops in
+        let bunch = Transition.Bunch.of_list ops in
         let t = set_mempool mempool t in
         bunch , t
       in

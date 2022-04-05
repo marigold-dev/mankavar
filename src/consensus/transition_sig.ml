@@ -21,8 +21,7 @@ module Bunch : sig
   val max_gas : int64
 
   type t
-  val dummy : t
-  val make : Operation.t list -> t
+  val of_list : Operation.t list -> t
   val to_list : t -> Operation.t list
   val encoding : t Encoding.t
 end
