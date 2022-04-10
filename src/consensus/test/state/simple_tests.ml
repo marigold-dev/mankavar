@@ -4,7 +4,11 @@ module CD = Das_tendermint
 module CD_raw = Das_tendermint_sc_raw
 module ND = Das_network.Dummy
 module Node = Das_network.Node
-module TendermintNode = CD.RawTendermintNode
+module TendermintNode = CD.RawTendermintNode(struct
+  type 'a t = 'a
+  let view x = x
+  let update x _ = x
+end)
 module Transition = Das_tendermint_sc_raw.Transition
 module Operation = Transition.Operation
 module DeadNode = CD.RawDeadNode
@@ -51,7 +55,7 @@ let mk_empty_node endorsers x =
   let start_clock = XPtime.now () in
   let node_state = CD_raw.Transition.State.clone bootstrap_state in
   let chain_state = put_node_state node_state in
-  TendermintNode.empty start_clock endorsers ~network:"test" ~chain_state x
+  CD.Content.empty start_clock endorsers ~network:"test" ~chain_state x
 
 let honest_live = test_quick "Can originate a contract" @@ fun () ->
   (* ignore @@ assert false ; *)
@@ -85,7 +89,7 @@ let honest_live = test_quick "Can originate a contract" @@ fun () ->
     Format.printf "Next Contract Index: %Ld@;%!"
       node_state.next_contract_index ;
     let prev_height = !last_height in
-    last_height := TendermintNode.height zero_node ;
+    last_height := CD.Content.height zero_node ;
     if Height.(!last_height <> prev_height) then (
       Format.printf "new height : %a@;%!" Height.pp !last_height ;
       if !last_height = Height.of_int32 2l then (

@@ -3,7 +3,11 @@ open Das_helpers
 module CD = Das_tendermint
 module ND = Das_network.Dummy
 module Node = Das_network.Node
-module TendermintNode = CD.RawTendermintNode
+module TendermintNode = CD.RawTendermintNode(struct
+  type 'a t = 'a
+  let view x = x
+  let update x _ = x
+end)
 module DeadNode = CD.RawDeadNode
 module Network = ND.Make(struct
   module Message = CD.Message
@@ -25,7 +29,7 @@ let mk_empty_node endorsers account =
     (Das_tendermint_noop_raw.Transition.State.mk_empty ())
     : Das_tendermint.Transition.State.t
   ) in
-  TendermintNode.empty start_clock endorsers account
+  CD.Content.empty start_clock endorsers account
     ~network:"test" ~chain_state
 
 let honest_live = test_quick "Live when nodes honest" @@ fun () ->
@@ -47,8 +51,8 @@ let honest_live = test_quick "Live when nodes honest" @@ fun () ->
   let network' = Network.run_for duration Start.network in
   let module Zero = (val network' |> Network.nodes |> List.hd) in
   let zero_node = (Obj.magic Zero.x : TendermintNode.t) in
-  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ TendermintNode.height zero_node ;
-  assert (TendermintNode.height zero_node >= Height.of_int32 10l) ;
+  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ CD.Content.height zero_node ;
+  assert (CD.Content.height zero_node >= Height.of_int32 10l) ;
   ignore @@ network' ;
   ()
 
@@ -79,8 +83,8 @@ let third_live = test_quick "Live when 1/3 nodes dead" @@ fun () ->
   let network' = Network.run_for duration Start.network in
   let module Zero = (val network' |> Network.nodes |> fun lst -> List.nth lst CD.max_byzantine) in
   let zero_node = (Obj.magic Zero.x : TendermintNode.t) in
-  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ TendermintNode.height zero_node ;
-  assert (TendermintNode.height zero_node >= Height.of_int32 10l) ;
+  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ CD.Content.height zero_node ;
+  assert (CD.Content.height zero_node >= Height.of_int32 10l) ;
   ignore @@ network' ;
   ()
 
@@ -111,8 +115,8 @@ let third_plus_dead = test_quick "Dead when 1+1/3 nodes dead" @@ fun () ->
   let network' = Network.run_for duration Start.network in
   let module Zero = (val network' |> Network.nodes |> fun lst -> List.nth lst (1 + CD.max_byzantine)) in
   let zero_node = (Obj.magic Zero.x : TendermintNode.t) in
-  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ TendermintNode.height zero_node ;
-  assert (TendermintNode.height zero_node = Height.of_int32 0l) ;
+  Format.printf "Height : %ld\n" @@ Height.to_int32 @@ CD.Content.height zero_node ;
+  assert (CD.Content.height zero_node = Height.of_int32 0l) ;
   ignore @@ network' ;
   ()
 
